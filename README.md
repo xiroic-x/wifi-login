@@ -67,9 +67,11 @@ adb shell "miniapp_cli start 8001865309000001"
 
 ## 日志
 
-应用运行日志单独存储在  (目录不存在自动创建, 超过 512KB 自动截断轮转):
+应用运行日志单独存储在 `/userdisk/xiro/wifi.log` (目录不存在自动创建, 超过 512KB 自动截断轮转):
 
-
+```
+adb shell "cat /userdisk/xiro/wifi.log"
+```
 
 记录: 启动、连通性测试结果、Portal 配置解析、登录请求结果、心跳异常认证、手动服务器输入、下线。
 
