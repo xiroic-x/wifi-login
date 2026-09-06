@@ -49,17 +49,21 @@ export class SystemIme {
     this.attached = true
     // == DEBUG: 观察其他相关事件 ==
     try {
-      $falcon.on('apolloTextEditClosed', function (res) {
-        var s
-        try {
-          s = typeof res === 'string' ? res : JSON.stringify(res)
-        } catch (e) {
-          s = String(res)
+      var logRaw = function (tag) {
+        return function (res) {
+          var s
+          try {
+            s = typeof res === 'string' ? res : JSON.stringify(res)
+          } catch (e) {
+            s = String(res)
+          }
+          console.warn('[ime] ' + tag + ' raw=' + s)
         }
-        console.warn('[ime] apolloTextEditClosed raw=' + s)
-      })
+      }
+      $falcon.on('apolloTextEditClosed', logRaw('apolloTextEditClosed'))
+      $falcon.on('textEditFinished', logRaw('falcon.textEditFinished'))
     } catch (e) {
-      console.warn('[ime] apollo listener err ' + e)
+      console.warn('[ime] extra listener err ' + e)
     }
   }
 
