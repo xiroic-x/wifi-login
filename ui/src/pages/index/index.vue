@@ -82,8 +82,8 @@
 <script>
 import { checkPortal } from '../../services/detect.js'
 import { loadPortalConf, userLogin, queryAuthStat, logout } from '../../services/portal.js'
-import { SystemIme } from '../../services/ime.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
+import { SystemIme } from '../../services/ime.js'
 
 export default {
   name: 'index',
@@ -114,11 +114,11 @@ export default {
   methods: {
     onShow() {
       if (this._started) {
-        // 系统输入法面板是独立 mini-app, 打开时会让本页 onHide/onShow 一轮;
+        // 系统输入法面板弹出/收起会让本页 onHide/onShow 一轮;
         // 输入会话中及刚关闭的短暂窗口内不做自动刷新, 否则会把登录表单冲掉
+        if (this.logging) return
         if (this._imeBusy) return
         if (this._imeClosedAt && Date.now() - this._imeClosedAt < 3000) return
-        if (this.logging) return
         // 从后台回来: 认证会话可能已过期, 停留超过 90 秒未同步则自动重新检测
         var stale = !this._lastSyncAt || Date.now() - this._lastSyncAt > 90000
         if ((this.pageState === 'portal' || this.pageState === 'manual') && stale) {
@@ -172,6 +172,58 @@ export default {
     setMsg(text, type) {
       this.msg = text || ''
       this.msgType = type || 'info'
+    },
+
+    /* ---- 系统输入法输入 (global.startTextEdit, skill 状态机) ---- */
+    openIme(opts) {
+      var self = this
+      this._imeBusy = true
+      return this.ime.open(opts).then(function (v) {
+        self._imeBusy = false
+        self._imeClosedAt = Date.now()
+        return v
+      }, function () {
+        self._imeBusy = false
+        self._imeClosedAt = Date.now()
+        return null
+      })
+    },
+    editServer() {
+      var self = this
+      this.openIme({
+        text: this.manualServer,
+        placeholder: '例如 192.168.3.12:8080',
+        maxlength: 64,
+        enterButtonText: '确定',
+      }).then(function (v) {
+        if (v == null) return
+        self.manualServer = v.trim()
+      })
+    },
+    editUsername() {
+      var self = this
+      this.openIme({
+        text: this.username,
+        placeholder: '请输入账号',
+        maxlength: 64,
+        enterButtonText: '下一步',
+      }).then(function (v) {
+        if (v == null) return
+        self.username = v.trim()
+        self.editPassword()
+      })
+    },
+    editPassword() {
+      var self = this
+      this.openIme({
+        text: this.password,
+        placeholder: '请输入密码',
+        maxlength: 64,
+        enterButtonText: '确定',
+      }).then(function (v) {
+        if (v == null) return
+        self.password = v
+      })
     },
 
     /*
@@ -329,83 +381,6 @@ export default {
     },
 
     /* ---- 手动服务器 ---- */
-    /* ---- 输入 ---- */
-    /* 统一入口: 打开系统输入法并标记会话状态 (输入法面板会引发 onHide/onShow) */
-    openIme(opts) {
-      var self = this
-      this._imeBusy = true
-      return this.ime.open(opts).then(function (v) {
-        self._imeBusy = false
-        self._imeClosedAt = Date.now()
-        return v
-      }, function (e) {
-        self._imeBusy = false
-        self._imeClosedAt = Date.now()
-        return null
-      })
-    },
-    editServer() {
-      var self = this
-      this.openIme({
-        text: this.manualServer,
-        placeholder: '例如 192.168.3.12:8080',
-        maxlength: 64,
-        enterButtonText: '确定',
-      }).then(function (v) {
-        if (v == null) return
-        self.manualServer = v.trim()
-      })
-    },
-    applyManualServer() {
-      var v = (this.manualServer || '').trim()
-      if (!v) {
-        this.setMsg('请先输入服务器地址', 'warn')
-        return
-      }
-      if (!/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(v)) {
-        this.setMsg('地址格式应为 IP[:端口]', 'error')
-        return
-      }
-      var base = 'http://' + v
-      var gen = (this._gen = (this._gen || 0) + 1)
-      this.showManualServer = false
-      this.saveServer(base)
-      this.afterPortal(base, {}, gen)
-    },
-    saveServer(base) {
-      var self = this
-      loadAccount().then(function (acc) {
-        acc.serverBase = base
-        saveAccount(acc)
-      })
-    },
-
-    /* ---- 输入 ---- */
-    editUsername() {
-      var self = this
-      this.openIme({
-        text: this.username,
-        placeholder: '请输入账号',
-        maxlength: 64,
-        enterButtonText: '下一步',
-      }).then(function (v) {
-        if (v == null) return
-        self.username = v.trim()
-        self.editPassword()
-      })
-    },
-    editPassword() {
-      var self = this
-      this.openIme({
-        text: this.password,
-        placeholder: '请输入密码',
-        maxlength: 64,
-        enterButtonText: '确定',
-      }).then(function (v) {
-        if (v == null) return
-        self.password = v
-      })
-    },
     toggleRemember() {
       this.remember = !this.remember
     },
