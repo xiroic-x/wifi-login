@@ -282,6 +282,7 @@ export default {
         if (gen !== self._gen) return
         self.checking = false
         self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe
+        log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
         if (det.status === 'free') {
           self.pageState = 'free'
           self.serverBase = ''
