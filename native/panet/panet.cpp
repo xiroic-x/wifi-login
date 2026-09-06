@@ -23,6 +23,8 @@
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -347,6 +349,29 @@ static HttpResponse httpFetch(const std::string &url, const std::string &method,
     return parseResponse(raw);
 }
 
+// 逐级创建目录 (含最后一段), 已存在则忽略
+static void mkdirsOf(const std::string &path)
+{
+    size_t pos = 0;
+    for (;;) {
+        pos = path.find('/', pos + 1);
+        if (pos == std::string::npos) break;
+        std::string dir = path.substr(0, pos);
+        if (!dir.empty()) mkdir(dir.c_str(), 0755);
+    }
+    mkdir(path.c_str(), 0755);
+}
+
+static long fileSizeOf(const std::string &path)
+{
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fclose(f);
+    return size;
+}
+
 class Panet : public JQPublishObject {
 public:
     // request(url, method, timeoutSec) -> Promise<{statusCode, headers[], body(b64)}>
@@ -399,6 +424,47 @@ public:
         }
     }
 
+    // appendFile(path, text) -> Promise<true>  (追加写; 超过 512KB 自动截断轮转)
+    void appendFile(JQAsyncInfo &info)
+    {
+        try {
+            if (info.Length() < 2 || !info[0].is_string() || !info[1].is_string())
+                throw std::runtime_error("usage: appendFile(path, text)");
+            std::string path = info[0].string_value();
+            std::string data = info[1].string_value();
+            mkdirsOf(path.substr(0, path.find_last_of('/')));
+            if (fileSizeOf(path) > 512 * 1024) {
+                FILE *t = fopen(path.c_str(), "wb");
+                if (t) fclose(t);
+            }
+            FILE *f = fopen(path.c_str(), "ab");
+            if (!f) throw std::runtime_error("open for append failed: " + path + " errno=" + std::to_string(errno));
+            size_t n = fwrite(data.data(), 1, data.size(), f);
+            fclose(f);
+            if (n != data.size()) throw std::runtime_error("short append: " + path);
+            info.post(true);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
+
+    // mkdirs(path) -> Promise<true>  (逐级创建目录)
+    void mkdirs(JQAsyncInfo &info)
+    {
+        try {
+            if (info.Length() < 1 || !info[0].is_string())
+                throw std::runtime_error("usage: mkdirs(path)");
+            mkdirsOf(info[0].string_value());
+            info.post(true);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
+
     // readFile(path) -> Promise<string>  (不存在/失败返回空串)
     void readFile(JQAsyncInfo &info)
     {
@@ -433,6 +499,8 @@ static JSValue createPanet(JQModuleEnv *env)
     });
     tpl->SetProtoMethodPromise("request", &Panet::request);
     tpl->SetProtoMethodPromise("writeFile", &Panet::writeFile);
+    tpl->SetProtoMethodPromise("appendFile", &Panet::appendFile);
+    tpl->SetProtoMethodPromise("mkdirs", &Panet::mkdirs);
     tpl->SetProtoMethodPromise("readFile", &Panet::readFile);
     return tpl->CallConstructor();
 }

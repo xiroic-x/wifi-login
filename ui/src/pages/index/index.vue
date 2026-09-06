@@ -83,6 +83,7 @@
 import { checkPortal } from '../../services/detect.js'
 import { loadPortalConf, userLogin, queryAuthStat, logout } from '../../services/portal.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
+import { log, initLog } from '../../services/logger.js'
 import { SystemIme } from '../../services/ime.js'
 
 export default {
@@ -128,6 +129,8 @@ export default {
       }
       this._started = true
       this.ime = new SystemIme()
+      initLog()
+      log('应用', '页面启动')
       var self = this
       // == DEBUG: 真机联调开关, 验证完删除 ==
       var DBG = null // 联调开关: 设为 { server, username, password } 可跳过探测直连指定服务器
@@ -245,6 +248,7 @@ export default {
           if (res.ok && res.data && res.data.stat && res.data.stat != 0) {
             self.stopHeartbeat()
             self._lastSyncAt = Date.now()
+            log('心跳', 'stat=' + res.data.stat + ' 已在别处认证')
             self.pageState = 'ok'
             self.showForm = false
             self.canLogout = true
@@ -345,6 +349,7 @@ export default {
         if (gen !== self._gen) return
         if (res.ok && res.code === 200) {
           // MAC 免认证已通过
+          log('配置', 'code=200 已通过认证 server=' + serverBase)
           self.pageState = 'ok'
           self.showForm = false
           self.stopHeartbeat()
@@ -356,6 +361,7 @@ export default {
           self.authType = policy.auth1 || 'panabit'
           self.sceneStr = policy.scene_str || ''
           self._lastSyncAt = Date.now()
+          log('配置', 'code=0 auth=' + self.authType + ' server=' + serverBase)
           if (self.authType !== 'panabit') {
             self.pageState = 'portal'
             self.showForm = false
@@ -375,6 +381,7 @@ export default {
           return
         }
         if (res.code === -1) {
+          log('配置', 'server=' + serverBase + ' 无响应: ' + res.msg)
           // 服务器连不上/响应异常: 地址可能不对, 提供手动输入 (预填当前地址)
           self.pageState = 'manual'
           self.showForm = false
@@ -385,6 +392,7 @@ export default {
         }
         self.pageState = 'portal'
         self.showForm = true
+        log('配置', 'server=' + serverBase + ' code=' + res.code + ' msg=' + res.msg)
         self.setMsg(res.msg, 'error')
       })
     },
@@ -404,6 +412,7 @@ export default {
       var base = 'http://' + v
       var gen = (this._gen = (this._gen || 0) + 1)
       this.showManualServer = false
+      log('手动服务器', base)
       this.saveServer(base)
       this.afterPortal(base, {}, gen)
     },
@@ -432,6 +441,7 @@ export default {
       }
       this.logging = true
       var gen = (this._gen = (this._gen || 0) + 1)
+      log('登录', 'user=' + this.username + ' server=' + this.serverBase + ' remember=' + this.remember)
       var loginOpts = function () {
         return {
           authType: self.authType,
@@ -487,6 +497,7 @@ export default {
       }
 
       this.logging = false
+      log('登录', '结果 code=' + res.code + ' msg=' + res.msg)
       if (!res.ok) {
         if (res.code === 3 && res.data && res.data.left) {
           this.setMsg('尝试过多，已锁定 ' + res.data.left + ' 秒', 'error')
@@ -523,6 +534,7 @@ export default {
       checkPortal().then(function (det) {
         if (gen !== self._gen) return
         self.logging = false
+        log('复查', det.status)
         if (det.status === 'free') {
           self.pageState = 'ok'
           self.showForm = false
@@ -549,6 +561,7 @@ export default {
       if (!this.serverBase) return
       this.setMsg('正在下线…', 'info')
       logout(this.serverBase, { ip: this.paramOf('wlanuserip') }).then(function (res) {
+        log('下线', 'code=' + res.code + ' msg=' + res.msg)
         self.runCheck()
       })
     },
