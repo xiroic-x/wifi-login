@@ -1,7 +1,8 @@
 {
   "pages": {
     "index": "pages/index/index.vue",
-    "log": "pages/log/log.vue"
+    "log": "pages/log/log.vue",
+    "about": "pages/about/about.vue"
   },
   "options": {
     "style": {}

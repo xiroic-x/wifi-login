@@ -6,6 +6,9 @@
         <div class="headbtn headbtn-sm" @click="openLog">
           <text class="headbtn-text">日志</text>
         </div>
+        <div class="headbtn headbtn-sm" @click="openAbout">
+          <text class="headbtn-text">关于</text>
+        </div>
         <div class="headbtn" @click="runCheck">
           <text class="headbtn-text">{{ checking ? '检测中…' : '重新检测' }}</text>
         </div>
@@ -221,6 +224,14 @@ export default {
         $falcon.navTo('log', {})
         return true
       }
+      if (action === 'check') {
+        // 检测网络是否需要登入, 结果通过 $falcon.trigger 回传给调用方
+        var cb = String(o.callback || 'wifiCheckResult')
+        log('接口', '外部调用: 检测网络, 回调事件=' + cb)
+        this._checkCallback = cb
+        this.runCheck()
+        return true
+      }
       var server = this.normalizeServer(o.server)
       if (action === 'login' || server) {
         if (!server) {
@@ -291,6 +302,10 @@ export default {
 
     openLog() {
       $falcon.navTo('log', {})
+    },
+
+    openAbout() {
+      $falcon.navTo('about', {})
     },
 
     /* ---- 系统输入法输入 (global.startTextEdit, skill 状态机) ---- */
@@ -399,6 +414,27 @@ export default {
         self.checking = false
         self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe
         log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
+        if (self._checkCallback) {
+          // 外部检测接口: 回传结果 JSON 给调用方 ($falcon.on(回调名) 接收)
+          var result = {
+            status: det.status,
+            needLogin: det.status === 'portal',
+            probe: det.probe,
+            serverIp: det.serverIp,
+            serverPort: det.serverPort,
+            serverBase: det.serverBase,
+            portalPage: det.portalPage,
+            pageTitle: det.pageTitle,
+            error: det.error,
+          }
+          try {
+            $falcon.trigger(self._checkCallback, JSON.stringify(result))
+            log('接口', '检测结果已回调 ' + self._checkCallback + ' ' + JSON.stringify(result))
+          } catch (e) {
+            log('接口', '回调失败: ' + e)
+          }
+          self._checkCallback = null
+        }
         if (det.status === 'free') {
           self.pageState = 'free'
           self.serverBase = ''

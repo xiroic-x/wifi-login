@@ -1,0 +1,35 @@
+{
+  "appName": "wifi-login",
+  "version": "0.4.0",
+  "appid": "8001865309000001",
+  "quickjs": {
+    "version": "20200705",
+    "bigNum": false
+  },
+  "cert": {
+    "app.js.bin": {
+      "size": 3526,
+      "md5": "932b82387c06037f23f27d6d9cb86f09"
+    },
+    "index.js.bin": {
+      "size": 32486,
+      "md5": "add444ae86e896e5c69b2d6966eed8bd"
+    },
+    "log.js.bin": {
+      "size": 3314,
+      "md5": "16931728c9ef25bcea1d365543da3a0d"
+    },
+    "logger-d3c3f7c5.js.bin": {
+      "size": 879,
+      "md5": "e753bfaf5f157beba129e47831f43180"
+    },
+    "libs/.gitkeep": {
+      "size": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "libs/libjsapi_panet.so": {
+      "size": 455112,
+      "md5": "5ab882106e1219707df9a0ccd2a7ec0a"
+    }
+  }
+}

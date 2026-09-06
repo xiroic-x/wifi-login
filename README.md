@@ -80,6 +80,13 @@ $falcon.navTo('falcon://8001865309000001/index', {
   auto: '1',
 })
 
+// 检测网络是否需要登入 (结果 JSON 经 $falcon.trigger('wifiCheckResult') 回传:
+//   $falcon.on('wifiCheckResult', json => { ... })
+//   { status: 'free'|'portal'|'offline', needLogin: bool, probe, serverIp,
+//     serverPort, serverBase, portalPage, pageTitle, error }
+$falcon.navTo('falcon://8001865309000001/index', { action: 'check' })
+$falcon.navTo('falcon://8001865309000001/index', { action: 'check', callback: 'myEventName' })
+
 // 仅打开日志页
 $falcon.navTo('falcon://8001865309000001/index', { action: 'log' })
 
@@ -89,7 +96,8 @@ $falcon.navTo('falcon://8001865309000001')
 
 | 参数 | 说明 |
 |---|---|
-| action | `login` 直接进入登录流程 / `log` 打开日志页 / 缺省 = 自动连通性检测 |
+| action | `login` 登录 / `check` 检测并回调结果 / `log` 日志页 / 缺省 = 自动连通性检测 |
+| callback | `action=check` 时结果回调的事件名, 缺省 `wifiCheckResult` |
 | server | `IP[:端口]` 或 `http://IP[:端口]`, 提供则跳过自动探测 (https 不支持) |
 | username / password | 预填凭据 (密码明文传输, 仅限调用方可信场景) |
 | remember | `'1'` 记住密码 |
