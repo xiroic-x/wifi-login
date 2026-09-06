@@ -350,7 +350,14 @@ export default {
           ':' +
           p2(d.getSeconds())
         this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
-        this._panet.writeFile('/userdisk/xiro/status.json', JSON.stringify(det)).catch(function () {})
+        this._panet
+          .writeFile('/userdisk/xiro/status.json', JSON.stringify(det))
+          .then(function () {
+            log('状态', 'status.json 写入成功')
+          })
+          .catch(function (e) {
+            log('状态', 'status.json 写入失败: ' + e)
+          })
       } catch (e) {}
     },
 
@@ -376,7 +383,14 @@ export default {
           ':' +
           p2(d.getSeconds())
         this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
-        this._panet.writeFile('/userdisk/xiro/status.json', JSON.stringify(det)).catch(function () {})
+        this._panet
+          .writeFile('/userdisk/xiro/status.json', JSON.stringify(det))
+          .then(function () {
+            log('状态', 'status.json 写入成功')
+          })
+          .catch(function (e) {
+            log('状态', 'status.json 写入失败: ' + e)
+          })
       } catch (e) {}
     },
 
