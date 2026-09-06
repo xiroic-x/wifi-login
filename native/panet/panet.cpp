@@ -377,6 +377,52 @@ public:
             info.postError("unknown panet error");
         }
     }
+
+    // writeFile(path, text) -> Promise<true>  (覆盖写, 供记住密码等持久化使用)
+    void writeFile(JQAsyncInfo &info)
+    {
+        try {
+            if (info.Length() < 2 || !info[0].is_string() || !info[1].is_string())
+                throw std::runtime_error("usage: writeFile(path, text)");
+            std::string path = info[0].string_value();
+            std::string data = info[1].string_value();
+            FILE *f = fopen(path.c_str(), "wb");
+            if (!f) throw std::runtime_error("open for write failed: " + path + " errno=" + std::to_string(errno));
+            size_t n = fwrite(data.data(), 1, data.size(), f);
+            fclose(f);
+            if (n != data.size()) throw std::runtime_error("short write: " + path);
+            info.post(true);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
+
+    // readFile(path) -> Promise<string>  (不存在/失败返回空串)
+    void readFile(JQAsyncInfo &info)
+    {
+        try {
+            if (info.Length() < 1 || !info[0].is_string())
+                throw std::runtime_error("usage: readFile(path)");
+            std::string path = info[0].string_value();
+            FILE *f = fopen(path.c_str(), "rb");
+            if (!f) {
+                info.post(std::string());
+                return;
+            }
+            std::string out;
+            char buf[4096];
+            size_t n;
+            while ((n = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
+            fclose(f);
+            info.post(out);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
 };
 
 static JSValue createPanet(JQModuleEnv *env)
@@ -386,6 +432,8 @@ static JSValue createPanet(JQModuleEnv *env)
         return new Panet();
     });
     tpl->SetProtoMethodPromise("request", &Panet::request);
+    tpl->SetProtoMethodPromise("writeFile", &Panet::writeFile);
+    tpl->SetProtoMethodPromise("readFile", &Panet::readFile);
     return tpl->CallConstructor();
 }
 

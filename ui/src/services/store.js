@@ -1,43 +1,40 @@
 /*
- * storage-kv 适配: 记住账号密码 (密码 AES 加密后落盘) + 上次认证服务器。
+ * 持久化适配: 固件不提供 storage JS 模块, 用 panet.writeFile/readFile
+ * 把账号数据存到应用私有数据目录 ($dataDir), JSON + 密码 AES 密文。
  * 读取失败/损坏一律回退默认值, 不抛异常。
  */
 
-import storage from 'storage'
+import { Panet } from 'panet'
 import { paAesEncode, paAesDecode } from './aes.js'
 
-var KEY_ACCOUNT = 'wifi_account_v1'
 var SCHEMA_VERSION = 1
+var _panet = null
+var _storePath = null
+var _memory = null // 读写缓存; $dataDir 不可用时作为唯一存储
 
-async function getJson(key) {
-  try {
-    var raw = await storage.getStorage(key)
-    if (raw == null) return null
-    if (typeof raw === 'object') {
-      if (typeof raw.data === 'string') raw = raw.data
-      else if (typeof raw.value === 'string') raw = raw.value
-      else return null
-    }
-    return JSON.parse(raw)
-  } catch (e) {
-    return null
-  }
+function client() {
+  if (!_panet) _panet = new Panet()
+  return _panet
 }
 
-async function setJson(key, obj) {
+function storePath() {
+  if (_storePath !== null) return _storePath
+  var dir = ''
   try {
-    await storage.setStorage(key, JSON.stringify(obj))
-    return true
+    dir = globalThis.$dataDir || ''
   } catch (e) {
-    return false
+    dir = ''
   }
+  _storePath = dir ? dir + '/wifi_account.json' : ''
+  return _storePath
 }
 
-export async function loadAccount() {
-  var d = await getJson(KEY_ACCOUNT)
-  if (!d || d.version !== SCHEMA_VERSION || typeof d !== 'object') {
-    return { version: SCHEMA_VERSION, username: '', password: '', remember: false, serverBase: '' }
-  }
+function defaults() {
+  return { version: SCHEMA_VERSION, username: '', password: '', remember: false, serverBase: '' }
+}
+
+function normalize(d) {
+  if (!d || typeof d !== 'object' || d.version !== SCHEMA_VERSION) return defaults()
   var password = ''
   if (d.password) {
     try {
@@ -55,13 +52,43 @@ export async function loadAccount() {
   }
 }
 
+export async function loadAccount() {
+  if (_memory) return _memory
+  var path = storePath()
+  var d = null
+  if (path) {
+    try {
+      var raw = await client().readFile(path)
+      if (raw) d = JSON.parse(raw)
+    } catch (e) {
+      d = null
+    }
+  }
+  _memory = normalize(d)
+  return _memory
+}
+
 /* password 以 AES 密文落盘, 不存明文 */
-export function saveAccount(acc) {
-  return setJson(KEY_ACCOUNT, {
+export async function saveAccount(acc) {
+  var data = {
     version: SCHEMA_VERSION,
     username: acc.username || '',
     password: acc.password ? paAesEncode(acc.password) : '',
     remember: acc.remember === true,
     serverBase: acc.serverBase || '',
-  })
+  }
+  var mem = defaults()
+  mem.username = data.username
+  mem.password = acc.password || ''
+  mem.remember = data.remember
+  mem.serverBase = data.serverBase
+  _memory = mem
+  var path = storePath()
+  if (!path) return false
+  try {
+    await client().writeFile(path, JSON.stringify(data))
+    return true
+  } catch (e) {
+    return false
+  }
 }
