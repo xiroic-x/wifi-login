@@ -41,12 +41,12 @@
       </div>
       <div class="field" @click="editPassword">
         <text class="fieldlabel">密码</text>
-        <text class="fieldvalue" v-if="password">{{ passwordMask }}</text>
+        <text class="fieldvalue" v-if="password">{{ password }}</text>
         <text class="fieldvalue fieldplaceholder" v-if="!password">点此输入密码</text>
       </div>
       <div class="remember" @click="toggleRemember">
-        <text class="checkbox">{{ remember ? '☑' : '☐' }}</text>
-        <text class="remembertext">记住密码</text>
+        <text class="remembertext remembertext-on" v-if="remember">已记住密码</text>
+        <text class="remembertext" v-if="!remember">记住密码</text>
       </div>
       <div class="btn btn-login" v-if="!logging" @click="doLogin">
         <text class="btn-text">登 录</text>
@@ -110,19 +110,16 @@ export default {
       msgType: 'info',
     }
   },
-  computed: {
-    passwordMask() {
-      var n = this.password.length
-      var s = ''
-      for (var i = 0; i < n; i++) s += '●'
-      return s
-    },
-  },
+  computed: {},
   methods: {
     onShow() {
       if (this._started) {
+        // 系统输入法面板是独立 mini-app, 打开时会让本页 onHide/onShow 一轮;
+        // 输入会话中及刚关闭的短暂窗口内不做自动刷新, 否则会把登录表单冲掉
+        if (this._imeBusy) return
+        if (this._imeClosedAt && Date.now() - this._imeClosedAt < 3000) return
+        if (this.logging) return
         // 从后台回来: 认证会话可能已过期, 停留超过 90 秒未同步则自动重新检测
-        if (this.ime) this.ime.cancel()
         var stale = !this._lastSyncAt || Date.now() - this._lastSyncAt > 90000
         if ((this.pageState === 'portal' || this.pageState === 'manual') && stale) {
           this.runCheck()
@@ -139,6 +136,7 @@ export default {
         this.password = DBG.password
         this.remember = true
         this._lastServer = DBG.server
+        this._lastSyncAt = Date.now()
         this.pageState = 'portal'
         this.serverBase = DBG.server
         this.serverShow = DBG.server.replace('http://', '')
@@ -157,6 +155,8 @@ export default {
       })
     },
     onHide() {
+      // 输入会话中 (输入法面板导致的 onHide): 保留会话与心跳, 不当成本页离开
+      if (this._imeBusy) return
       this.stopHeartbeat()
       if (this.ime) this.ime.cancel()
     },
@@ -329,19 +329,32 @@ export default {
     },
 
     /* ---- 手动服务器 ---- */
+    /* ---- 输入 ---- */
+    /* 统一入口: 打开系统输入法并标记会话状态 (输入法面板会引发 onHide/onShow) */
+    openIme(opts) {
+      var self = this
+      this._imeBusy = true
+      return this.ime.open(opts).then(function (v) {
+        self._imeBusy = false
+        self._imeClosedAt = Date.now()
+        return v
+      }, function (e) {
+        self._imeBusy = false
+        self._imeClosedAt = Date.now()
+        return null
+      })
+    },
     editServer() {
       var self = this
-      this.ime
-        .open({
-          text: this.manualServer,
-          placeholder: '例如 192.168.3.12:8080',
-          maxlength: 64,
-          enterButtonText: '确定',
-        })
-        .then(function (v) {
-          if (v == null) return
-          self.manualServer = v.trim()
-        })
+      this.openIme({
+        text: this.manualServer,
+        placeholder: '例如 192.168.3.12:8080',
+        maxlength: 64,
+        enterButtonText: '确定',
+      }).then(function (v) {
+        if (v == null) return
+        self.manualServer = v.trim()
+      })
     },
     applyManualServer() {
       var v = (this.manualServer || '').trim()
@@ -370,32 +383,28 @@ export default {
     /* ---- 输入 ---- */
     editUsername() {
       var self = this
-      this.ime
-        .open({
-          text: this.username,
-          placeholder: '请输入账号',
-          maxlength: 64,
-          enterButtonText: '下一步',
-        })
-        .then(function (v) {
-          if (v == null) return
-          self.username = v.trim()
-          if (v != null) self.editPassword()
-        })
+      this.openIme({
+        text: this.username,
+        placeholder: '请输入账号',
+        maxlength: 64,
+        enterButtonText: '下一步',
+      }).then(function (v) {
+        if (v == null) return
+        self.username = v.trim()
+        self.editPassword()
+      })
     },
     editPassword() {
       var self = this
-      this.ime
-        .open({
-          text: this.password,
-          placeholder: '请输入密码',
-          maxlength: 64,
-          enterButtonText: '确定',
-        })
-        .then(function (v) {
-          if (v == null) return
-          self.password = v
-        })
+      this.openIme({
+        text: this.password,
+        placeholder: '请输入密码',
+        maxlength: 64,
+        enterButtonText: '确定',
+      }).then(function (v) {
+        if (v == null) return
+        self.password = v
+      })
     },
     toggleRemember() {
       this.remember = !this.remember
@@ -668,14 +677,12 @@ export default {
   align-items: center;
   margin-right: 10px;
 }
-.checkbox {
-  font-size: 22px;
-  color: #37c2a0;
-  margin-right: 6px;
-}
 .remembertext {
   font-size: 18px;
   color: #b8cde8;
+}
+.remembertext-on {
+  color: #37c2a0;
 }
 .btn {
   height: 42px;

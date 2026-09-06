@@ -11,6 +11,7 @@ TEST_PASS_MD5_AES = None  # 收到什么记什么, 只比对明文
 LOG = []
 
 VALID = {"test": "123456"}
+AUTH = {"ok": False}
 
 
 def gb(s):
@@ -44,11 +45,12 @@ class Handler(BaseHTTPRequestHandler):
                   % (uname, q.get("password", ""), remember, q.get("ip"), q.get("mac"),
                      q.get("code"), q.get("auth_type")), flush=True)
             if ok:
+                AUTH["ok"] = True
                 body = '{"msg":"成功","code":0,"data":null}'
             else:
                 body = '{"msg":"认证失败:INV_NAMEORPWD","code":255,"data":null}'
         elif action == "query_auth_stat":
-            body = '{"msg":"成功","code":0,"data":{"stat":1}}'
+            body = '{"msg":"成功","code":0,"data":{"stat":%d}}' % (1 if AUTH["ok"] else 0)
         elif action == "sms_send_code":
             body = '{"msg":"成功","code":0,"data":{"left":60}}'
         else:
