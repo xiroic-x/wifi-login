@@ -13,7 +13,7 @@ class App extends $falcon.App {
     this.setViewPort(DESIGN_WIDTH)
     $falcon.useDefaultBasePageClass(BasePage)
     initLog()
-    log('应用', 'onLaunch version=' + ($falcon.$meta && $falcon.$meta.version ? $falcon.$meta.version : ''))
+    log('应用', 'onLaunch appid=' + (globalThis.$appid || ''))
     try {
       console.log('[wifi-login] env=' + JSON.stringify($falcon.env))
     } catch (e) {}
