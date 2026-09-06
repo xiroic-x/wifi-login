@@ -47,6 +47,20 @@ export class SystemIme {
     }
     m.textEditFinished.on(this.handler)
     this.attached = true
+    // == DEBUG: 观察其他相关事件 ==
+    try {
+      $falcon.on('apolloTextEditClosed', function (res) {
+        var s
+        try {
+          s = typeof res === 'string' ? res : JSON.stringify(res)
+        } catch (e) {
+          s = String(res)
+        }
+        console.warn('[ime] apolloTextEditClosed raw=' + s)
+      })
+    } catch (e) {
+      console.warn('[ime] apollo listener err ' + e)
+    }
   }
 
   /*
@@ -144,7 +158,24 @@ export class SystemIme {
     var text = confirmed ? normalizeText(payload) : ''
     var p = this.pending
     this.pending = null
-    this.close()
+    // == DEBUG: 观察 closeTextEdit 返回值 (可能携带输入文本) ==
+    var closeRet = null
+    if (this.uuid) {
+      try {
+        closeRet = getInputManager().closeTextEdit(this.uuid)
+      } catch (e) {
+        closeRet = 'throw ' + e
+      }
+      this.uuid = ''
+      this.lastCloseAt = Date.now()
+    }
+    var cr
+    try {
+      cr = typeof closeRet === 'string' ? closeRet : JSON.stringify(closeRet)
+    } catch (e) {
+      cr = String(closeRet)
+    }
+    console.warn('[ime] closeTextEdit ret=' + cr + ' confirmed=' + confirmed)
     p.resolve(confirmed ? text : null)
   }
 
