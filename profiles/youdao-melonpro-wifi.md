@@ -36,8 +36,10 @@ validation:
     - strings libjsapi_export.so → startTextEdit/textEditFinished 存在
     - strings libfalcon.so → http / storage 模块名存在
     - AES 实现对照 Node crypto ALL PASS; detect 解析 ALL PASS (test/)
-  untested:
-    - http JSAPI 实际返回包装形态 (ArrayBuffer vs {statusCode,headers,data})
-    - http 是否自动跟随 302 / 是否暴露 Location
-    - global.startTextEdit 返回 UUID 形态与 textEditFinished 回调字段
-    - 真实 Panabit portal 的 user_login 全流程
+  实测结论 (2026-09-06):
+    - 固件无系统 http/storage JS 模块 → 自研 libjsapi_panet.so (socket HTTP + 文件持久化)
+    - global.startTextEdit 可弹出系统输入法; textEditFinished 回调多参数,
+      首参为去横线 UUID, 文本在后续参数 (需归一化比对), 应参考多参数解析
+    - 关闭后立刻重开输入法会被忽略, 需 >=600ms 间隔 + 失败重试
+    - 输入法面板会引发页面 onHide/onShow, 需"输入会话中"守卫防止自动刷新冲掉表单
+    - 连通性测试/无需登入提示/登录表单/IME 输入/登录请求格式 全部真机验证通过

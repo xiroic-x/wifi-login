@@ -33,25 +33,25 @@
       </div>
     </div>
 
-    <div class="formrow" v-if="showForm">
-      <div class="field" @click="editUsername">
+    <div class="formrow" v-if="showForm || canLogout">
+      <div class="field" v-if="showForm" @click="editUsername">
         <text class="fieldlabel">账号</text>
         <text class="fieldvalue" v-if="username">{{ username }}</text>
         <text class="fieldvalue fieldplaceholder" v-if="!username">点此输入账号</text>
       </div>
-      <div class="field" @click="editPassword">
+      <div class="field" v-if="showForm" @click="editPassword">
         <text class="fieldlabel">密码</text>
         <text class="fieldvalue" v-if="password">{{ password }}</text>
         <text class="fieldvalue fieldplaceholder" v-if="!password">点此输入密码</text>
       </div>
-      <div class="remember" @click="toggleRemember">
+      <div class="remember" v-if="showForm" @click="toggleRemember">
         <text class="remembertext remembertext-on" v-if="remember">已记住密码</text>
         <text class="remembertext" v-if="!remember">记住密码</text>
       </div>
-      <div class="btn btn-login" v-if="!logging" @click="doLogin">
+      <div class="btn btn-login" v-if="showForm && !logging" @click="doLogin">
         <text class="btn-text">登 录</text>
       </div>
-      <div class="btn btn-busy" v-if="logging">
+      <div class="btn btn-busy" v-if="showForm && logging">
         <text class="btn-text">登录中…</text>
       </div>
       <div class="btn btn-logout" v-if="canLogout" @click="doLogout">
@@ -130,7 +130,7 @@ export default {
       this.ime = new SystemIme()
       var self = this
       // == DEBUG: 真机联调开关, 验证完删除 ==
-      var DBG = globalThis.__WIFI_LOGIN_DEBUG || null
+      var DBG = null // 联调开关: 设为 { server, username, password } 可跳过探测直连指定服务器
       if (DBG) {
         this.username = DBG.username
         this.password = DBG.password
@@ -222,7 +222,7 @@ export default {
         enterButtonText: '确定',
       }).then(function (v) {
         if (v == null) return
-        self.password = v
+        self.password = v.replace(/^\s+|\s+$/g, '')
       })
     },
 
@@ -374,6 +374,15 @@ export default {
           }
           return
         }
+        if (res.code === -1) {
+          // 服务器连不上/响应异常: 地址可能不对, 提供手动输入 (预填当前地址)
+          self.pageState = 'manual'
+          self.showForm = false
+          self.showManualServer = true
+          self.manualServer = self.serverShow
+          self.setMsg('服务器无响应（' + res.msg + '），可手动输入正确地址', 'warn')
+          return
+        }
         self.pageState = 'portal'
         self.showForm = true
         self.setMsg(res.msg, 'error')
@@ -381,6 +390,30 @@ export default {
     },
 
     /* ---- 手动服务器 ---- */
+    /* 自动探测不到/连不上服务器时, 手动输入 IP[:端口] 或主机名 */
+    applyManualServer() {
+      var v = (this.manualServer || '').replace(/^\s+|\s+$/g, '')
+      if (!v) {
+        this.setMsg('请先输入服务器地址', 'warn')
+        return
+      }
+      if (!/^[A-Za-z0-9.\-]+(:\d+)?$/.test(v)) {
+        this.setMsg('地址格式应为 IP[:端口] 或主机名', 'error')
+        return
+      }
+      var base = 'http://' + v
+      var gen = (this._gen = (this._gen || 0) + 1)
+      this.showManualServer = false
+      this.saveServer(base)
+      this.afterPortal(base, {}, gen)
+    },
+    saveServer(base) {
+      var self = this
+      loadAccount().then(function (acc) {
+        acc.serverBase = base
+        saveAccount(acc)
+      })
+    },
     toggleRemember() {
       this.remember = !this.remember
     },
