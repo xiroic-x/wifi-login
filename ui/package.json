@@ -1,0 +1,30 @@
+{
+  "name": "wifi-login",
+  "appid": "8001865309000001",
+  "version": "0.1.0",
+  "description": "WiFi 网络认证 (Panabit Portal 账号密码登录) for 有道词典笔",
+  "icon": "app_icon.png",
+  "quickjs": {
+    "version": "20200705",
+    "bigNum": false
+  },
+  "single-js-bundle": false,
+  "scripts": {
+    "build": "aiot-cli -p",
+    "build:dev": "aiot-cli",
+    "package": "aiot-cli -c -q -p"
+  },
+  "keywords": [
+    "iot",
+    "miniapp",
+    "wifi",
+    "portal"
+  ],
+  "devDependencies": {
+    "aiot-vue-cli": "^1.0.32"
+  },
+  "dependencies": {
+    "falcon-ui": "^2.0.2"
+  },
+  "packageManager": "pnpm@10.12.4"
+}
