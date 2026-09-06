@@ -1,51 +1,41 @@
 /*
- * http JSAPI 适配层。
- * 固件内置 http 模块 (libfalcon.so), 文档形态: http.request({url,method,headers,data,timeout})
- * 返回 Promise。返回值可能是 ArrayBuffer/Uint8Array(二进制 body), 也可能是带
- * statusCode/headers 的对象。这里统一归一化, 页面只消费稳定结构。
+ * panet 原生模块适配层。
+ * 固件不提供系统 http 模块 (js_modules 仅 events/qjs-dbus/util), 网络能力由
+ * 自带 native 库 libjsapi_panet.so 提供: request(url, method, timeoutSec)
+ * -> Promise<{statusCode, headers:["Name: value"...], body:base64}>
+ * 这里归一化成稳定结构, 页面只消费 {ok, statusCode, headers, body, text}。
  */
 
-import { http } from 'http'
+import { Panet } from 'panet'
 
-function bytesFromArrayLike(arr) {
-  var out = new Uint8Array(arr.length || 0)
-  for (var i = 0; i < out.length; i++) out[i] = arr[i] & 0xff
-  return out
+var _panet = null
+
+function client() {
+  if (!_panet) _panet = new Panet()
+  return _panet
 }
 
-export function toBytes(data) {
-  if (data == null) return new Uint8Array(0)
-  if (typeof data === 'string') return utf8Bytes(data)
-  if (typeof data.length === 'number' && typeof data.byteLength !== 'number') {
-    return bytesFromArrayLike(data)
-  }
-  if (typeof data.byteLength === 'number') {
-    var view = data instanceof Uint8Array ? data : new Uint8Array(data)
-    return new Uint8Array(view)
-  }
-  return new Uint8Array(0)
-}
-
-function utf8Bytes(str) {
+function b64ToBytes(b64) {
+  var TBL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
   var out = []
-  for (var i = 0; i < str.length; i++) {
-    var c = str.charCodeAt(i)
-    if (c < 0x80) out.push(c)
-    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f))
-    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length) {
-      var c2 = str.charCodeAt(i + 1)
-      if (c2 >= 0xdc00 && c2 <= 0xdfff) {
-        var cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00)
-        out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f))
-        i++
-      } else out.push(0xef, 0xbf, 0xbd)
-    } else out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f))
+  var buf = 0
+  var bits = 0
+  for (var i = 0; i < b64.length; i++) {
+    var c = TBL.indexOf(b64.charAt(i))
+    if (c < 0) continue // 跳过 padding/空白
+    buf = (buf << 6) | c
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      out.push((buf >> bits) & 0xff)
+    }
   }
-  return bytesFromArrayLike(out)
+  var arr = new Uint8Array(out.length)
+  for (var j = 0; j < out.length; j++) arr[j] = out[j]
+  return arr
 }
 
-/* 单字节字符串: 每个字符一个字节, 用于把二进制当 latin1 文本处理 */
-export function bytesToLatin1(bytes) {
+function bytesToLatin1(bytes) {
   var s = ''
   var CHUNK = 4096
   for (var i = 0; i < bytes.length; i += CHUNK) {
@@ -54,47 +44,76 @@ export function bytesToLatin1(bytes) {
   return s
 }
 
+function toBytes(data) {
+  if (data == null) return new Uint8Array(0)
+  if (typeof data === 'string') return bytesOfLatin1String(data)
+  if (typeof data.length === 'number' && typeof data.byteLength !== 'number') {
+    var arr = new Uint8Array(data.length)
+    for (var i = 0; i < data.length; i++) arr[i] = data[i] & 0xff
+    return arr
+  }
+  if (typeof data.byteLength === 'number') {
+    var view = typeof Uint8Array !== 'undefined' && data instanceof Uint8Array ? data : new Uint8Array(data)
+    return new Uint8Array(view)
+  }
+  return new Uint8Array(0)
+}
+
+function bytesOfLatin1String(str) {
+  var out = []
+  for (var i = 0; i < str.length; i++) out.push(str.charCodeAt(i) & 0xff)
+  return new Uint8Array(out)
+}
+
+function headersToMap(lines) {
+  var map = {}
+  for (var i = 0; i < lines.length; i++) {
+    var idx = lines[i].indexOf(':')
+    if (idx < 0) continue
+    var key = lines[i].slice(0, idx).toLowerCase()
+    map[key] = lines[i].slice(idx + 1).trim()
+  }
+  return map
+}
+
 /*
- * 发起请求。
- * 返回: { ok, statusCode, headers, body: Uint8Array, text: latin1 文本, error }
- * 永不 throw, 调用方按 ok 分支处理。
+ * 发起请求, 永不 throw。
+ * 返回: { ok, statusCode, headerLines, headers(小写键 map), body: Uint8Array, text: latin1, error }
  */
 export async function request(opts) {
-  var req = {
-    url: opts.url,
-    method: opts.method || 'GET',
-    timeout: opts.timeout || 8,
-  }
-  if (opts.headers) req.headers = opts.headers
+  var url = opts.url
+  var method = opts.method || 'GET'
+  var timeout = opts.timeout || 8
   var res
   try {
-    res = await http.request(req)
+    res = await client().request(url, method, timeout)
   } catch (e) {
-    return { ok: false, statusCode: 0, headers: null, body: new Uint8Array(0), text: '', error: '网络请求失败: ' + describeErr(e) }
+    return {
+      ok: false,
+      statusCode: 0,
+      headerLines: [],
+      headers: {},
+      body: new Uint8Array(0),
+      text: '',
+      error: '网络请求失败: ' + describeErr(e),
+    }
   }
-  var statusCode = 0
-  var headers = null
-  var bodyData = null
-  if (res && typeof res === 'object' && typeof res.byteLength !== 'number' && typeof res.length !== 'number') {
-    statusCode = numOr(res.statusCode, numOr(res.status, numOr(res.code, 0)))
-    headers = res.headers || res.header || null
-    bodyData = res.data !== undefined ? res.data : res.body !== undefined ? res.body : res.bytes !== undefined ? res.bytes : null
-  } else {
-    bodyData = res
+  var lines = []
+  if (res && res.headers) {
+    if (typeof res.headers.length === 'number') lines = res.headers
+    else if (typeof res.headers === 'string') lines = res.headers.split('\n')
   }
-  var body = toBytes(bodyData)
+  var bodyB64 = res && typeof res.body === 'string' ? res.body : ''
+  var body = b64ToBytes(bodyB64)
   return {
     ok: true,
-    statusCode: statusCode,
-    headers: headers,
+    statusCode: res && typeof res.statusCode === 'number' ? res.statusCode : 0,
+    headerLines: lines,
+    headers: headersToMap(lines),
     body: body,
     text: bytesToLatin1(body),
     error: '',
   }
-}
-
-function numOr(v, d) {
-  return typeof v === 'number' ? v : d
 }
 
 export function describeErr(e) {

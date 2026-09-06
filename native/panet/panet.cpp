@@ -1,0 +1,407 @@
+/*
+ * panet — 词典笔最小 HTTP JSAPI (从零实现, 仅 POSIX socket, 零第三方依赖)
+ *
+ * 背景: 该笔固件不向第三方应用提供系统级 http 模块 (js_modules 仅
+ * events/qjs-dbus/util), CloudBrowser/bilibili 等应用均自带 native 网络库。
+ * 本模块以 JSCModuleExtension 形式注册为 JS 模块 "panet",
+ * 供小程序 `import { Panet } from "panet"` 使用。
+ *
+ * 设计要点:
+ *  - 不跟随 302: 连通性测试需要直接看到 Location 头, 才能知道跳转页面与 Portal 服务器 IP
+ *  - body 以 base64 返回: Portal 响应为 GB2312, 走 JSON 字符串会破坏字节
+ *  - 支持 GET/POST(空 body 或 text body), Transfer-Encoding: chunked 解码
+ */
+
+#include <jsmodules/JSCModuleExtension.h>
+#include <jquick_config.h>
+#include <jqutil_v2/JQFuncDef.h>
+#include <jqutil_v2/JQFunctionTemplate.h>
+#include <jqutil_v2/JQTemplateEnv.h>
+
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+#include <exception>
+#include <string>
+#include <vector>
+
+using namespace JQUTIL_NS;
+
+static const char *kUserAgent = "panet/0.1 (youdao-pen wifi-login)";
+
+static std::string base64Encode(const std::string &in)
+{
+    static const char *tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((in.size() + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 2 < in.size()) {
+        unsigned v = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8 | (unsigned char)in[i + 2];
+        out.push_back(tbl[(v >> 18) & 0x3f]);
+        out.push_back(tbl[(v >> 12) & 0x3f]);
+        out.push_back(tbl[(v >> 6) & 0x3f]);
+        out.push_back(tbl[v & 0x3f]);
+        i += 3;
+    }
+    if (i + 1 == in.size()) {
+        unsigned v = (unsigned char)in[i] << 16;
+        out.push_back(tbl[(v >> 18) & 0x3f]);
+        out.push_back(tbl[(v >> 12) & 0x3f]);
+        out.push_back('=');
+        out.push_back('=');
+    } else if (i + 2 == in.size()) {
+        unsigned v = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8;
+        out.push_back(tbl[(v >> 18) & 0x3f]);
+        out.push_back(tbl[(v >> 12) & 0x3f]);
+        out.push_back(tbl[(v >> 6) & 0x3f]);
+        out.push_back('=');
+    }
+    return out;
+}
+
+static std::string jsonEscape(const std::string &in)
+{
+    std::string out;
+    out.reserve(in.size());
+    char buf[8];
+    for (size_t i = 0; i < in.size(); i++) {
+        unsigned char c = (unsigned char)in[i];
+        if (c == '"' || c == '\\') {
+            out.push_back('\\');
+            out.push_back((char)c);
+        } else if (c < 0x20 || c == 0x7f) {
+            snprintf(buf, sizeof(buf), "\\u%04x", c);
+            out += buf;
+        } else {
+            out.push_back((char)c);
+        }
+    }
+    return out;
+}
+
+struct UrlParts {
+    std::string host;
+    std::string port;
+    std::string path; // 以 / 开头, 含 query
+};
+
+static UrlParts parseUrl(const std::string &url)
+{
+    UrlParts u;
+    u.port = "80";
+    std::string rest = url;
+    if (rest.rfind("http://", 0) == 0) {
+        rest = rest.substr(7);
+    } else if (rest.rfind("https://", 0) == 0) {
+        // https 不在本模块支持范围 (portal 场景全部为 http)
+        throw std::runtime_error("https not supported, use http");
+    }
+    size_t slash = rest.find('/');
+    std::string hostPort = slash == std::string::npos ? rest : rest.substr(0, slash);
+    u.path = slash == std::string::npos ? "/" : rest.substr(slash);
+    if (!hostPort.empty() && hostPort[0] == '[') {
+        // ipv6 [::1]:8080
+        size_t rb = hostPort.find(']');
+        if (rb == std::string::npos) throw std::runtime_error("bad ipv6 url");
+        u.host = hostPort.substr(1, rb - 1);
+        if (rb + 1 < hostPort.size() && hostPort[rb + 1] == ':')
+            u.port = hostPort.substr(rb + 2);
+    } else {
+        size_t colon = hostPort.rfind(':');
+        if (colon == std::string::npos) {
+            u.host = hostPort;
+        } else {
+            u.host = hostPort.substr(0, colon);
+            u.port = hostPort.substr(colon + 1);
+        }
+    }
+    if (u.host.empty()) throw std::runtime_error("empty host");
+    return u;
+}
+
+class TcpConn {
+public:
+    ~TcpConn() { closeFd(); }
+
+    void connect(const std::string &host, const std::string &port, int timeoutSec)
+    {
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+
+        struct addrinfo *res = NULL;
+        int rc = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
+        if (rc != 0 || res == NULL)
+            throw std::runtime_error("dns resolve failed: " + host);
+
+        int lastErr = 0;
+        for (struct addrinfo *ai = res; ai != NULL; ai = ai->ai_next) {
+            int fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+            if (fd < 0) {
+                lastErr = errno;
+                continue;
+            }
+            // 非阻塞 connect + poll 超时
+            int flags = fcntl(fd, F_GETFL, 0);
+            fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+            rc = ::connect(fd, ai->ai_addr, ai->ai_addrlen);
+            if (rc != 0 && errno != EINPROGRESS) {
+                lastErr = errno;
+                ::close(fd);
+                continue;
+            }
+            if (rc != 0) {
+                struct pollfd pfd;
+                pfd.fd = fd;
+                pfd.events = POLLOUT;
+                rc = poll(&pfd, 1, timeoutSec * 1000);
+                if (rc <= 0) {
+                    lastErr = rc == 0 ? ETIMEDOUT : errno;
+                    ::close(fd);
+                    continue;
+                }
+                int soerr = 0;
+                socklen_t slen = sizeof(soerr);
+                getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen);
+                if (soerr != 0) {
+                    lastErr = soerr;
+                    ::close(fd);
+                    continue;
+                }
+            }
+            fcntl(fd, F_SETFL, flags); // 恢复阻塞模式
+            _fd = fd;
+            break;
+        }
+        freeaddrinfo(res);
+        if (_fd < 0)
+            throw std::runtime_error("connect failed: " + host + ":" + port + " errno=" + std::to_string(lastErr));
+
+        struct timeval tv;
+        tv.tv_sec = timeoutSec;
+        tv.tv_usec = 0;
+        setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    }
+
+    void sendAll(const std::string &data)
+    {
+        size_t off = 0;
+        while (off < data.size()) {
+            ssize_t n = ::send(_fd, data.data() + off, data.size() - off, 0);
+            if (n <= 0) throw std::runtime_error("send failed errno=" + std::to_string(errno));
+            off += (size_t)n;
+        }
+    }
+
+    // 读到对端关闭或超时; 超时抛出
+    std::string recvAll()
+    {
+        std::string out;
+        char buf[4096];
+        for (;;) {
+            ssize_t n = ::recv(_fd, buf, sizeof(buf), 0);
+            if (n == 0) break;
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                if (out.empty()) throw std::runtime_error("recv failed errno=" + std::to_string(errno));
+                break; // 已有部分数据, 收下
+            }
+            out.append(buf, (size_t)n);
+            if (out.size() > 4 * 1024 * 1024) throw std::runtime_error("response too large");
+        }
+        return out;
+    }
+
+private:
+    void closeFd()
+    {
+        if (_fd >= 0) ::close(_fd);
+        _fd = -1;
+    }
+    int _fd = -1;
+};
+
+struct HttpResponse {
+    int statusCode = 0;
+    std::vector<std::string> headerLines;
+    std::string body;
+};
+
+static std::string toLower(std::string s)
+{
+    for (size_t i = 0; i < s.size(); i++)
+        if (s[i] >= 'A' && s[i] <= 'Z') s[i] = (char)(s[i] - 'A' + 'a');
+    return s;
+}
+
+static std::string trim(const std::string &s)
+{
+    size_t b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return "";
+    size_t e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+
+// 解析头 + 按 Content-Length / chunked 截取 body
+static HttpResponse parseResponse(const std::string &raw)
+{
+    HttpResponse r;
+    size_t headerEnd = raw.find("\r\n\r\n");
+    size_t sepLen = 4;
+    if (headerEnd == std::string::npos) {
+        headerEnd = raw.find("\n\n");
+        sepLen = 2;
+    }
+    std::string head = headerEnd == std::string::npos ? raw : raw.substr(0, headerEnd);
+    std::string body = headerEnd == std::string::npos ? "" : raw.substr(headerEnd + sepLen);
+
+    size_t lineStart = 0;
+    bool first = true;
+    std::string transferEncoding, contentLength;
+    while (lineStart < head.size()) {
+        size_t lineEnd = head.find('\n', lineStart);
+        std::string line = trim(lineEnd == std::string::npos ? head.substr(lineStart) : head.substr(lineStart, lineEnd - lineStart));
+        lineStart = lineEnd == std::string::npos ? head.size() : lineEnd + 1;
+        if (line.empty()) continue;
+        if (first) {
+            first = false;
+            // HTTP/1.1 302 Found
+            size_t sp1 = line.find(' ');
+            size_t sp2 = sp1 == std::string::npos ? std::string::npos : line.find(' ', sp1 + 1);
+            if (sp1 != std::string::npos && sp2 != std::string::npos)
+                r.statusCode = atoi(line.substr(sp1 + 1, sp2 - sp1 - 1).c_str());
+            continue;
+        }
+        size_t colon = line.find(':');
+        if (colon == std::string::npos) continue;
+        std::string key = toLower(trim(line.substr(0, colon)));
+        std::string val = trim(line.substr(colon + 1));
+        if (key == "transfer-encoding") transferEncoding = toLower(val);
+        else if (key == "content-length") contentLength = val;
+        r.headerLines.push_back(line);
+    }
+
+    bool chunked = transferEncoding.find("chunked") != std::string::npos;
+    if (chunked) {
+        // dechunk
+        std::string out;
+        size_t pos = 0;
+        for (;;) {
+            size_t eol = body.find("\r\n", pos);
+            if (eol == std::string::npos) break;
+            std::string sizeLine = trim(body.substr(pos, eol - pos));
+            size_t semi = sizeLine.find(';');
+            if (semi != std::string::npos) sizeLine = sizeLine.substr(0, semi);
+            unsigned long chunkLen = strtoul(sizeLine.c_str(), NULL, 16);
+            pos = eol + 2;
+            if (chunkLen == 0) break;
+            if (pos + chunkLen > body.size()) {
+                out += body.substr(pos);
+                pos = body.size();
+                break;
+            }
+            out += body.substr(pos, chunkLen);
+            pos += chunkLen + 2; // 跳过块尾 CRLF
+        }
+        r.body = out;
+    } else if (!contentLength.empty()) {
+        unsigned long len = strtoul(contentLength.c_str(), NULL, 10);
+        r.body = body.substr(0, len < body.size() ? len : body.size());
+    } else {
+        r.body = body;
+    }
+    return r;
+}
+
+static HttpResponse httpFetch(const std::string &url, const std::string &method, int timeoutSec)
+{
+    UrlParts u = parseUrl(url);
+    TcpConn conn;
+    conn.connect(u.host, u.port, timeoutSec);
+
+    bool isPost = method == "POST";
+    std::string req;
+    req += (isPost ? "POST " : "GET ") + u.path + " HTTP/1.1\r\n";
+    req += "Host: " + u.host + (u.port == "80" ? "" : ":" + u.port) + "\r\n";
+    req += std::string("User-Agent: ") + kUserAgent + "\r\n";
+    req += "Accept: */*\r\n";
+    if (isPost) {
+        // Panabit 网页端使用 GB2312 表单编码; 本协议所有参数都在 query 中, body 恒为空
+        req += "Content-Type: application/x-www-form-urlencoded\r\n";
+        req += "Content-Length: 0\r\n";
+    }
+    req += "Connection: close\r\n\r\n";
+
+    conn.sendAll(req);
+    std::string raw = conn.recvAll();
+    if (raw.empty()) throw std::runtime_error("empty response");
+    return parseResponse(raw);
+}
+
+class Panet {
+public:
+    // request(url, method, timeoutSec) -> Promise<{statusCode, headers[], body(b64)}>
+    void request(JQAsyncInfo &info)
+    {
+        try {
+            if (info.Length() < 1 || !info[0].is_string())
+                throw std::runtime_error("usage: request(url, method='GET', timeoutSec=8)");
+            std::string url = info[0].string_value();
+            std::string method = info.Length() > 1 && info[1].is_string() ? info[1].string_value() : "GET";
+            int timeoutSec = info.Length() > 2 && info[2].is_number() ? info[2].int_value() : 8;
+            if (timeoutSec <= 0 || timeoutSec > 60) timeoutSec = 8;
+
+            HttpResponse r = httpFetch(url, method, timeoutSec);
+
+            std::string headersJson;
+            for (size_t i = 0; i < r.headerLines.size(); i++) {
+                if (i) headersJson += ",";
+                headersJson += "\"" + jsonEscape(r.headerLines[i]) + "\"";
+            }
+            std::string json = "{\"statusCode\":" + std::to_string(r.statusCode) +
+                               ",\"headers\":[" + headersJson + "]" +
+                               ",\"body\":\"" + base64Encode(r.body) + "\"}";
+            info.postJSON(json);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
+};
+
+static JSValue createPanet(JQModuleEnv *env)
+{
+    JQFunctionTemplateRef tpl = JQFunctionTemplate::New(env, "Panet");
+    tpl->InstanceTemplate()->setObjectCreator([]() {
+        return new Panet();
+    });
+    tpl->SetProtoMethodPromise("request", &Panet::request);
+    return tpl->CallConstructor();
+}
+
+static std::vector<std::string> exportList = {"Panet"};
+
+static int module_init(JSContext *ctx, JSModuleDef *m)
+{
+    auto env = JQModuleEnv::CreateModule(ctx, m, "panet");
+    env->setModuleExport("Panet", createPanet(env.get()));
+    env->setModuleExportDone(JS_UNDEFINED, exportList);
+    return 0;
+}
+
+DEF_MODULE_LOAD_FUNC_EXPORT(panet, module_init, exportList)
+
+extern "C" JQUICK_EXPORT void custom_init_jsapis()
+{
+    registerCModuleLoader("panet", &panet_module_load);
+}

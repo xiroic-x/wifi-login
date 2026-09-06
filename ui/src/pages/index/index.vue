@@ -400,6 +400,7 @@ export default {
           authType: self.authType,
           ip: self.paramOf('wlanuserip'),
           mac: self.paramOf('clientmac'),
+          code: '',
           username: self.username,
           password: self.password,
           remember: self.remember,

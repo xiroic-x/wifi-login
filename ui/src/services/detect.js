@@ -36,64 +36,68 @@ var TIMEOUT = 6
  */
 export async function checkPortal() {
   var baidu = await request({ url: BAIDU.url, timeout: TIMEOUT })
-  var portalBody = ''
-  var portalProbe = ''
+  var c = classify(baidu)
 
-  if (baidu.ok && baidu.body.length > 0 && containsBaiduMarker(baidu.text)) {
-    // baidu 正常, 再用 204 探测双确认
-    var p = await firstProbe()
-    if (p.ok && p.body.length === 0) {
-      return freeResult(p.probe)
-    }
-    if (p.ok && p.body.length > 0) {
-      portalBody = p.text
-      portalProbe = p.probe
-    } else {
-      return freeResult(BAIDU.name)
-    }
-  } else if (baidu.ok && baidu.body.length > 0) {
-    // baidu 被劫持, 返回了认证页内容
-    portalBody = baidu.text
-    portalProbe = BAIDU.name
+  // 302 + Location: 直接拿到跳转页面 (panet 不跟随重定向)
+  if (c.kind === 'redirect') {
+    return portalResult(BAIDU.name, c.url, baidu)
+  }
+  if (c.kind === 'content' && containsBaiduMarker(baidu.text)) {
+    // baidu 正常, 再用 204 探测源双确认
+    var p = await firstProbeChecked()
+    if (p) return p
+    return freeResult(BAIDU.name)
   }
 
-  if (!portalBody) {
-    for (var i = 0; i < PROBES.length; i++) {
-      var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
-      if (!r.ok) continue
-      if (r.body.length === 0) return freeResult(PROBES[i].name)
-      portalBody = r.text
-      portalProbe = PROBES[i].name
-      break
-    }
+  // baidu 空/被劫持/失败: 逐个 204 探测源判定
+  for (var i = 0; i < PROBES.length; i++) {
+    var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
+    var rc = classify(r)
+    if (rc.kind === 'redirect') return portalResult(PROBES[i].name, rc.url, r)
+    if (rc.kind === 'empty') return freeResult(PROBES[i].name)
+    if (rc.kind === 'content') return portalResult(PROBES[i].name, extractRedirect(r.text), r)
   }
 
-  if (!portalBody) {
-    return offlineResult()
-  }
+  return offlineResult()
+}
 
-  // 被劫持: 解析跳转地址
-  var redirected = extractRedirect(portalBody)
-  var info = parsePortalUrl(redirected)
+/* 单个响应分类: redirect(302+Location) / empty(204) / content / error */
+function classify(r) {
+  if (!r.ok) return { kind: 'error' }
+  if (r.statusCode >= 300 && r.statusCode < 400 && r.headers && r.headers.location) {
+    return { kind: 'redirect', url: trimUrl(r.headers.location) }
+  }
+  if (r.body.length === 0) return { kind: 'empty' }
+  return { kind: 'content' }
+}
+
+/* 探测源依次判定, 返回 null 表示全部请求失败 */
+async function firstProbeChecked() {
+  for (var i = 0; i < PROBES.length; i++) {
+    var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
+    var c = classify(r)
+    if (c.kind === 'redirect') return portalResult(PROBES[i].name, c.url, r)
+    if (c.kind === 'empty') return freeResult(PROBES[i].name)
+    if (c.kind === 'content') return portalResult(PROBES[i].name, extractRedirect(r.text), r)
+  }
+  return null
+}
+
+function portalResult(probe, redirectUrl, resp) {
+  var bodyText = resp ? resp.text : ''
+  var url = redirectUrl || extractRedirect(bodyText)
+  var info = parsePortalUrl(url)
   return {
     status: 'portal',
-    probe: portalProbe,
-    portalPage: redirected,
+    probe: probe,
+    portalPage: url,
     serverIp: info.host,
     serverPort: info.port,
     serverBase: info.base,
     params: info.params,
-    pageTitle: extractTitle(portalBody),
-    snippet: portalBody.slice(0, 400),
+    pageTitle: extractTitle(bodyText),
+    snippet: bodyText.slice(0, 400),
   }
-}
-
-async function firstProbe() {
-  for (var i = 0; i < PROBES.length; i++) {
-    var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
-    if (r.ok) return { ok: true, body: r.body, text: r.text, probe: PROBES[i].name }
-  }
-  return { ok: false }
 }
 
 function containsBaiduMarker(text) {

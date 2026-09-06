@@ -84,7 +84,11 @@ export function loadPortalConf(serverBase, opts) {
   })
 }
 
-/* 账号密码登录 (auth_type 取 load_portal_conf 返回 policy.auth1, 默认 panabit) */
+/* 账号密码登录 (auth_type 取 load_portal_conf 返回 policy.auth1, 默认 panabit)
+ * 请求格式与网页端抓包一致:
+ * /api?route=webauth&action=user_login&auth_type=panabit&ip=&mac=&code=&
+ * username=<明文>&password=<AES hex>&remember_me=<0|1>
+ */
 export function userLogin(serverBase, opts) {
   var o = opts || {}
   return apiCall(serverBase, {
@@ -93,6 +97,7 @@ export function userLogin(serverBase, opts) {
     auth_type: o.authType || 'panabit',
     ip: o.ip || '',
     mac: o.mac || '',
+    code: o.code || '',
     username: o.username || '',
     password: paAesEncode(o.password || ''),
     remember_me: o.remember ? 1 : 0,

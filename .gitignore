@@ -4,3 +4,4 @@ syncheck/
 *.amr
 out/
 *.log
+build/

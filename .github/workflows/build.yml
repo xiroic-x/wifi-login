@@ -11,6 +11,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            cmake \
+            make
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Cross-compile libjsapi_panet.so (aarch64)
+        run: |
+          export CROSS_TOOLCHAIN_PREFIX=aarch64-linux-gnu-
+          cmake -B build/panet \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            native/panet
+          cmake --build build/panet --parallel $(nproc)
+          mkdir -p ui/libs
+          cp -f build/panet/libjsapi_panet.so ui/libs/libjsapi_panet.so
+          file ui/libs/libjsapi_panet.so
+          aarch64-linux-gnu-readelf -h ui/libs/libjsapi_panet.so | grep -E 'Class|Machine'
+          aarch64-linux-gnu-readelf -d ui/libs/libjsapi_panet.so | grep NEEDED
+          aarch64-linux-gnu-nm -D ui/libs/libjsapi_panet.so | grep custom_init_jsapis
+
       - name: Setup Node.js 18
         uses: actions/setup-node@v4
         with:
