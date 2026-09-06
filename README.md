@@ -105,6 +105,9 @@ $falcon.navTo('falcon://8001865309000001')
 
 页面已在前台时被重新拉起, 参数同样生效 (走 `onNewOptions`)。
 
+检测结果同时机器可读落盘 `/userdisk/xiro/status.json` (每次检测后更新):
+`{"time":"09-06 14:00:00","status":"free","probe":"小米","server":"","portalPage":"","message":"网络直连正常，无需登入"}`
+
 ## 日志
 
 应用运行日志单独存储在 `/userdisk/xiro/wifi.log` (目录不存在自动创建, 超过 512KB 自动截断轮转):

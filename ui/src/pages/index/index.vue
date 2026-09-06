@@ -92,6 +92,7 @@ import { checkPortal } from '../../services/detect.js'
 import { loadPortalConf, userLogin, queryAuthStat, logout } from '../../services/portal.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
 import { log, initLog } from '../../services/logger.js'
+import { Panet } from 'panet'
 import { SystemIme } from '../../services/ime.js'
 
 export default {
@@ -224,6 +225,30 @@ export default {
         $falcon.navTo('log', {})
         return true
       }
+      if (action === 'check' || action === 'status') {
+        var evt = String(o.callback || 'wifiCheckResult')
+        log('接口', '外部调用: 检测网络, 结果经 $falcon.trigger(' + evt + ') 回调')
+        this.runCheck(function (det) {
+          var result = {
+            status: det.status,
+            needLogin: det.status === 'portal',
+            probe: det.probe,
+            server: det.serverBase || '',
+            portalPage: det.portalPage || '',
+            message:
+              det.status === 'free'
+                ? '无需登入'
+                : det.status === 'portal'
+                  ? '需要登入'
+                  : '无网络连接',
+          }
+          try {
+            $falcon.trigger(evt, result)
+          } catch (e) {}
+          log('接口', '检测结果回调 ' + evt + ': ' + JSON.stringify(result))
+        })
+        return true
+      }
       if (action === 'check') {
         // 检测网络是否需要登入, 结果通过 $falcon.trigger 回传给调用方
         var cb = String(o.callback || 'wifiCheckResult')
@@ -303,9 +328,56 @@ export default {
     openLog() {
       $falcon.navTo('log', {})
     },
+    openAbout() {
+      $falcon.navTo('about', {})
+    },
+
+    /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
+    writeStatus(det) {
+      try {
+        var d = new Date()
+        var p2 = function (n) {
+          return (n < 10 ? '0' : '') + n
+        }
+        det.time =
+          p2(d.getMonth() + 1) +
+          '-' +
+          p2(d.getDate()) +
+          ' ' +
+          p2(d.getHours()) +
+          ':' +
+          p2(d.getMinutes()) +
+          ':' +
+          p2(d.getSeconds())
+        this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
+        this._panet.writeFile('/userdisk/xiro/status.json', JSON.stringify(det)).catch(function () {})
+      } catch (e) {}
+    },
 
     openAbout() {
       $falcon.navTo('about', {})
+    },
+
+    /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
+    writeStatus(det) {
+      try {
+        var d = new Date()
+        var p2 = function (n) {
+          return (n < 10 ? '0' : '') + n
+        }
+        det.time =
+          p2(d.getMonth() + 1) +
+          '-' +
+          p2(d.getDate()) +
+          ' ' +
+          p2(d.getHours()) +
+          ':' +
+          p2(d.getMinutes()) +
+          ':' +
+          p2(d.getSeconds())
+        this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
+        this._panet.writeFile('/userdisk/xiro/status.json', JSON.stringify(det)).catch(function () {})
+      } catch (e) {}
     },
 
     /* ---- 系统输入法输入 (global.startTextEdit, skill 状态机) ---- */
@@ -398,7 +470,9 @@ export default {
     },
 
     /* ---- 连通性测试 ---- */
-    runCheck() {
+    /* onDone: 可选, 检测完成后回调 (外部 check 接口用) */
+    runCheck(onDone) {
+      if (typeof onDone !== 'function') onDone = null
       var self = this
       var gen = (this._gen = (this._gen || 0) + 1)
       this.stopHeartbeat()
