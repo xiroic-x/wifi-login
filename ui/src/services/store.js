@@ -13,7 +13,7 @@ var _storePath = null
 var _memory = null // 读写缓存; $dataDir 不可用时作为唯一存储
 
 function client() {
-  if (!_panet) _panet = new Panet()
+  if (!_panet) _panet = typeof Panet === 'function' ? new Panet() : Panet
   return _panet
 }
 

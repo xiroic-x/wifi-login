@@ -10,8 +10,14 @@ import { Panet } from 'panet'
 
 var _panet = null
 
+/* 模块导出的可能是构造函数, 也可能是已构造好的实例, 两种形态都兼容 */
 function client() {
-  if (!_panet) _panet = new Panet()
+  if (_panet) return _panet
+  if (typeof Panet === 'function') {
+    _panet = new Panet()
+  } else {
+    _panet = Panet
+  }
   return _panet
 }
 
