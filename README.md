@@ -65,6 +65,38 @@ adb shell "miniapp_cli start 8001865309000001"
 
 > 该固件 `miniapp_cli start <appid>` 不带 `--page` 才进主页。
 
+## 外部小程序调用接口
+
+无图标应用, 供其他小程序按需拉起。调用方:
+
+```js
+// 打开登录界面 (指定服务器, 预填账号密码, 自动提交)
+$falcon.navTo('falcon://8001865309000001/index', {
+  action: 'login',
+  server: '192.168.64.199:8080',   // 或 http://192.168.64.199:8080
+  username: '15180484996',
+  password: 'xxxx',
+  remember: '1',
+  auto: '1',
+})
+
+// 仅打开日志页
+$falcon.navTo('falcon://8001865309000001/index', { action: 'log' })
+
+// 无参数 = 正常流程 (自动连通性检测)
+$falcon.navTo('falcon://8001865309000001')
+```
+
+| 参数 | 说明 |
+|---|---|
+| action | `login` 直接进入登录流程 / `log` 打开日志页 / 缺省 = 自动连通性检测 |
+| server | `IP[:端口]` 或 `http://IP[:端口]`, 提供则跳过自动探测 (https 不支持) |
+| username / password | 预填凭据 (密码明文传输, 仅限调用方可信场景) |
+| remember | `'1'` 记住密码 |
+| auto | `'1'` 且 server/username/password 齐全时自动提交登录 |
+
+页面已在前台时被重新拉起, 参数同样生效 (走 `onNewOptions`)。
+
 ## 日志
 
 应用运行日志单独存储在 `/userdisk/xiro/wifi.log` (目录不存在自动创建, 超过 512KB 自动截断轮转):

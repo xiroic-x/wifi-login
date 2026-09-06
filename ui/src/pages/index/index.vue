@@ -154,6 +154,8 @@ export default {
         this.setMsg('[调试] 已指向模拟认证服务器', 'warn')
         return
       }
+      // 外部小程序调用接口 (见 applyLaunch)
+      if (self.applyLaunch(self.readLaunchOptions())) return
       loadAccount().then(function (acc) {
         self.username = acc.username
         self.password = acc.password
@@ -161,6 +163,111 @@ export default {
         self._lastServer = acc.serverBase || ''
         self.runCheck()
       })
+    },
+
+    /* ---- 外部小程序调用接口 ----
+     * 其他小程序通过 $falcon.navTo('falcon://8001865309000001/index', {参数}) 调用,
+     * 参数 (KV 字符串) 也支持页面已被拉起时通过 newOptions 传入:
+     *   action  : 'login' 直接进入登录流程 / 'log' 打开日志页 / 缺省正常检测
+     *   server  : 'IP[:端口]' 或 'http://IP[:端口]' (提供则跳过自动探测)
+     *   username/password : 预填凭据 (密码明文传输, 仅限调用方可信时)
+     *   remember: '1' 记住密码
+     *   auto    : '1' 且 server/username/password 齐全时自动提交登录
+     */
+    readLaunchOptions() {
+      try {
+        var lo = this.$page && this.$page.loadOptions
+        var no = this.$page && this.$page.newOptions
+        var o = no && this.hasKeys(no) ? no : lo
+        if (!o) return null
+        if (typeof o === 'string') {
+          try {
+            o = JSON.parse(o)
+          } catch (e) {
+            return null
+          }
+        }
+        if (!o || typeof o !== 'object' || !this.hasKeys(o)) return null
+        return o
+      } catch (e) {
+        return null
+      }
+    },
+    hasKeys(o) {
+      for (var k in o) return true
+      return false
+    },
+    safeJson(o) {
+      try {
+        return JSON.stringify(o)
+      } catch (e) {
+        return String(o)
+      }
+    },
+    normalizeServer(v) {
+      var s = String(v || '').replace(/^\s+|\s+$/g, '')
+      if (!s) return ''
+      if (/^https:\/\//i.test(s)) return ''
+      s = s.replace(/^http:\/\//i, '').replace(/\/+$/, '')
+      if (!/^[A-Za-z0-9.\-]+(:\d+)?$/.test(s)) return ''
+      return 'http://' + s
+    },
+    /* 返回 true 表示已按调用参数执行, 跳过默认探测流程 */
+    applyLaunch(o) {
+      if (!o) return false
+      var action = String(o.action || '').toLowerCase()
+      if (action === 'log') {
+        log('接口', '外部调用: 打开日志页')
+        $falcon.navTo('log', {})
+        return true
+      }
+      var server = this.normalizeServer(o.server)
+      if (action === 'login' || server) {
+        if (!server) {
+          log('接口', '外部调用缺少有效 server: ' + String(o.server || ''))
+          this.runCheck()
+          return true
+        }
+        log('接口', '外部调用: 登录流程 server=' + server + ' auto=' + String(o.auto || ''))
+        this._lastServer = server
+        this._lastSyncAt = Date.now()
+        this.serverBase = server
+        this.serverShow = server.replace('http://', '')
+        if (o.username) this.username = String(o.username)
+        if (o.password) this.password = String(o.password)
+        if (o.remember === '1' || o.remember === 1 || o.remember === true) this.remember = true
+        this.authType = 'panabit'
+        this.pageState = 'portal'
+        this.showForm = true
+        this.showManualServer = false
+        this.startHeartbeat()
+        var auto = o.auto === '1' || o.auto === 1 || o.auto === true
+        if (auto && this.username && this.password) {
+          this.setMsg('外部调用自动登录中…', 'info')
+          this.doLogin()
+        } else {
+          this.setMsg('外部调用：请确认账号密码后点击登录', 'warn')
+        }
+        return true
+      }
+      return false
+    },
+    onNewOptions(options) {
+      // 页面已在运行时被外部重新拉起
+      var self = this
+      if (!this._started) return
+      var o = options
+      if (o && typeof o === 'string') {
+        try {
+          o = JSON.parse(o)
+        } catch (e) {
+          o = null
+        }
+      }
+      if (!o || typeof o !== 'object' || !this.hasKeys(o)) return
+      log('接口', '外部重新拉起: ' + safeJson(o))
+      if (this.applyLaunch(o)) return
+      this.runCheck()
     },
     onHide() {
       // 输入会话中 (输入法面板导致的 onHide): 保留会话与心跳, 不当成本页离开

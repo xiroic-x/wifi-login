@@ -104,6 +104,9 @@ export class BasePage extends PageRes {
   onNewOptions(options) {
     super.onNewOptions(options)
     this.options = options
+    if (this.$root && this.$root.onNewOptions) {
+      this.$root.onNewOptions(options)
+    }
   }
 
   onShow() {
