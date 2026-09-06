@@ -332,40 +332,13 @@ export default {
       $falcon.navTo('about', {})
     },
 
-    /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
-    writeStatus(det) {
-      try {
-        var d = new Date()
-        var p2 = function (n) {
-          return (n < 10 ? '0' : '') + n
-        }
-        det.time =
-          p2(d.getMonth() + 1) +
-          '-' +
-          p2(d.getDate()) +
-          ' ' +
-          p2(d.getHours()) +
-          ':' +
-          p2(d.getMinutes()) +
-          ':' +
-          p2(d.getSeconds())
-        this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
-        this._panet
-          .writeFile('/userdisk/xiro/status.json', JSON.stringify(det))
-          .then(function () {
-            log('状态', 'status.json 写入成功')
-          })
-          .catch(function (e) {
-            log('状态', 'status.json 写入失败: ' + e)
-          })
-      } catch (e) {}
-    },
-
+    
     openAbout() {
       $falcon.navTo('about', {})
     },
 
     /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
+/* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
     writeStatus(det) {
       try {
         var d = new Date()
