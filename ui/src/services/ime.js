@@ -96,8 +96,10 @@ export class SystemIme {
     var uuid = ''
     try {
       uuid = m.startTextEdit(JSON.stringify(config))
+      console.log('[ime] startTextEdit ret=' + JSON.stringify(uuid))
     } catch (e) {
       uuid = ''
+      console.log('[ime] startTextEdit threw ' + e)
     }
     if (uuid && typeof uuid === 'object' && uuid.uuid) uuid = uuid.uuid
 
@@ -118,6 +120,13 @@ export class SystemIme {
   }
 
   onFinished(res) {
+    console.log('[ime] finished raw=' + (function (r) {
+      try {
+        return typeof r === 'string' ? r : JSON.stringify(r)
+      } catch (e) {
+        return String(r)
+      }
+    })(res))
     if (!this.pending) return
     var payload = res
     if (typeof res === 'string') {
