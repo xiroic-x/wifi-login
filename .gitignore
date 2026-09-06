@@ -2,6 +2,10 @@ node_modules/
 .falcon_/
 syncheck/
 *.amr
+amr-inspect/
+dl/
+*.png
+
 out/
 *.log
 build/
