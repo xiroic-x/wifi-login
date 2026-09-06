@@ -1,6 +1,7 @@
 {
   "pages": {
-    "index": "pages/index/index.vue"
+    "index": "pages/index/index.vue",
+    "log": "pages/log/log.vue"
   },
   "options": {
     "style": {}

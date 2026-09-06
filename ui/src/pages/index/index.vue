@@ -2,8 +2,13 @@
   <div class="wrapper">
     <div class="headbar">
       <text class="title">WiFi 网络认证</text>
-      <div class="headbtn" @click="runCheck">
-        <text class="headbtn-text">{{ checking ? '检测中…' : '重新检测' }}</text>
+      <div class="headbtns">
+        <div class="headbtn headbtn-sm" @click="openLog">
+          <text class="headbtn-text">日志</text>
+        </div>
+        <div class="headbtn" @click="runCheck">
+          <text class="headbtn-text">{{ checking ? '检测中…' : '重新检测' }}</text>
+        </div>
       </div>
     </div>
 
@@ -175,6 +180,10 @@ export default {
     setMsg(text, type) {
       this.msg = text || ''
       this.msgType = type || 'info'
+    },
+
+    openLog() {
+      $falcon.navTo('log', {})
     },
 
     /* ---- 系统输入法输入 (global.startTextEdit, skill 状态机) ---- */
@@ -603,6 +612,15 @@ export default {
 .headbtn-text {
   font-size: 18px;
   color: #ffffff;
+}
+.headbtns {
+  flex-direction: row;
+  align-items: center;
+}
+.headbtn-sm {
+  width: 90px;
+  margin-right: 10px;
+  background-color: #3f5f85;
 }
 .statusarea {
   width: 960px;
