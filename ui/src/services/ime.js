@@ -6,6 +6,8 @@
  *   3. 回调先校验 UUID 再 parse; 仅 editConfirmed === true 时写回文本
  *   4. 业务完成后立即 closeTextEdit(uuid)
  *   5. 页面销毁先 off, 再关闭残留会话
+ * 真机实测补充: 关闭后立刻重开会被输入法忽略, 需要间隔 (这里取 600ms,
+ * 不足则等待), startTextEdit 返回空视为失败并重试一次。
  */
 
 import globalModule from 'global'
@@ -25,12 +27,15 @@ function normalizeText(value) {
   return typeof value === 'string' ? value : ''
 }
 
+var REOPEN_GAP_MS = 600
+
 export class SystemIme {
   constructor() {
     this.uuid = ''
     this.handler = null
     this.pending = null
     this.attached = false
+    this.lastCloseAt = 0
   }
 
   ensureHandler() {
@@ -50,17 +55,28 @@ export class SystemIme {
    * 确认返回输入文本, 取消/失败返回 null。
    */
   open(opts) {
-    var o = opts || {}
     var self = this
     this.ensureHandler()
+    var wait = 0
+    var now = Date.now()
+    if (now - this.lastCloseAt < REOPEN_GAP_MS) {
+      wait = REOPEN_GAP_MS - (now - this.lastCloseAt)
+    }
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        self.openNow(opts, resolve, 1)
+      }, wait)
+    })
+  }
+
+  openNow(opts, resolve, retriesLeft) {
+    var self = this
+    var o = opts || {}
     var m = getInputManager()
 
     // 打开前关闭旧会话
     if (this.uuid) {
-      try {
-        m.closeTextEdit(this.uuid)
-      } catch (e) {}
-      this.uuid = ''
+      this.close()
     }
     if (this.pending) {
       var old = this.pending
@@ -81,15 +97,24 @@ export class SystemIme {
     try {
       uuid = m.startTextEdit(JSON.stringify(config))
     } catch (e) {
-      return Promise.resolve(null)
+      uuid = ''
     }
     if (uuid && typeof uuid === 'object' && uuid.uuid) uuid = uuid.uuid
-    if (!uuid) return Promise.resolve(null)
+
+    if (!uuid) {
+      // 打开失败 (常见于上一次会话刚结束): 间隔后重试一次
+      if (retriesLeft > 0) {
+        setTimeout(function () {
+          self.openNow(opts, resolve, retriesLeft - 1)
+        }, REOPEN_GAP_MS)
+      } else {
+        resolve(null)
+      }
+      return
+    }
     this.uuid = uuid
 
-    return new Promise(function (resolve) {
-      self.pending = { resolve: resolve, uuid: uuid }
-    })
+    this.pending = { resolve: resolve, uuid: uuid }
   }
 
   onFinished(res) {
@@ -131,6 +156,7 @@ export class SystemIme {
       getInputManager().closeTextEdit(this.uuid)
     } catch (e) {}
     this.uuid = ''
+    this.lastCloseAt = Date.now()
   }
 
   /* 页面销毁: 先 off, 再关闭残留会话 */
