@@ -14,11 +14,11 @@
 
 #include <jsmodules/JSCModuleExtension.h>
 #include <jquick_config.h>
-#include <jqutil_v2/JQFuncDef.h>
-#include <jqutil_v2/JQFunctionTemplate.h>
-#include <jqutil_v2/JQTemplateEnv.h>
+#include <jqutil_v2/jqutil.h>
+#include <jqutil_v2/JQPublishObject.h>
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -347,7 +347,7 @@ static HttpResponse httpFetch(const std::string &url, const std::string &method,
     return parseResponse(raw);
 }
 
-class Panet {
+class Panet : public JQPublishObject {
 public:
     // request(url, method, timeoutSec) -> Promise<{statusCode, headers[], body(b64)}>
     void request(JQAsyncInfo &info)
