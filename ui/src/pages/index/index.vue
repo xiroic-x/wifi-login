@@ -132,6 +132,22 @@ export default {
       this._started = true
       this.ime = new SystemIme()
       var self = this
+      // == DEBUG: 真机联调开关, 验证完删除 ==
+      var DBG = globalThis.__WIFI_LOGIN_DEBUG || null
+      if (DBG) {
+        this.username = DBG.username
+        this.password = DBG.password
+        this.remember = true
+        this._lastServer = DBG.server
+        this.pageState = 'portal'
+        this.serverBase = DBG.server
+        this.serverShow = DBG.server.replace('http://', '')
+        this.authType = 'panabit'
+        this.showForm = true
+        this.startHeartbeat()
+        this.setMsg('[调试] 已指向模拟认证服务器', 'warn')
+        return
+      }
       loadAccount().then(function (acc) {
         self.username = acc.username
         self.password = acc.password

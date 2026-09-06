@@ -48,4 +48,7 @@ try {
   console.log(err)
 }
 
+// == DEBUG: 真机联调开关 (指向局域网模拟 Panabit 服务器), 验证完删除 ==
+globalThis['__WIFI_LOGIN_DEBUG'] = { server: 'http://192.168.1.10:8080', username: 'test', password: '123456' }
+
 export default App
