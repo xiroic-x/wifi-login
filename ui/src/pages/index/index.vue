@@ -223,7 +223,11 @@ export default {
           self.serverBase = ''
           self.serverShow = ''
           self.portalPage = ''
-          self.setMsg('请先连接 WiFi（设置 → 网络）', 'warn')
+          if (det.error) {
+            self.setMsg('请检查 WiFi 连接 (' + det.error + ')', 'warn')
+          } else {
+            self.setMsg('请先连接 WiFi（设置 → 网络）', 'warn')
+          }
           return
         }
         // 被强制门户拦截

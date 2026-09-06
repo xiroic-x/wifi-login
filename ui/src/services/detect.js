@@ -50,15 +50,19 @@ export async function checkPortal() {
   }
 
   // baidu 空/被劫持/失败: 逐个 204 探测源判定
+  var lastErr = ''
   for (var i = 0; i < PROBES.length; i++) {
     var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
     var rc = classify(r)
     if (rc.kind === 'redirect') return portalResult(PROBES[i].name, rc.url, r)
     if (rc.kind === 'empty') return freeResult(PROBES[i].name)
     if (rc.kind === 'content') return portalResult(PROBES[i].name, extractRedirect(r.text), r)
+    if (r.error) lastErr = PROBES[i].name + ': ' + r.error
   }
 
-  return offlineResult()
+  var off = offlineResult()
+  off.error = lastErr
+  return off
 }
 
 /* 单个响应分类: redirect(302+Location) / empty(204) / content / error */
@@ -109,7 +113,7 @@ function freeResult(probe) {
 }
 
 function offlineResult() {
-  return { status: 'offline', probe: '', portalPage: '', serverIp: '', serverPort: '', serverBase: '', params: {}, pageTitle: '', snippet: '' }
+  return { status: 'offline', probe: '', portalPage: '', serverIp: '', serverPort: '', serverBase: '', params: {}, pageTitle: '', snippet: '', error: '' }
 }
 
 function extractTitle(text) {
