@@ -356,6 +356,7 @@ export default {
           ':' +
           p2(d.getSeconds())
         this._panet = this._panet || (typeof Panet === 'function' ? new Panet() : Panet)
+        log('状态', 'writeFile typeof=' + typeof this._panet.writeFile)
         this._panet
           .writeFile('/userdisk/xiro/status.json', JSON.stringify(det))
           .then(function () {
@@ -364,7 +365,9 @@ export default {
           .catch(function (e) {
             log('状态', 'status.json 写入失败: ' + e)
           })
-      } catch (e) {}
+      } catch (e) {
+        log('状态', 'writeStatus 同步异常: ' + e)
+      }
     },
 
     /* ---- 系统输入法输入 (global.startTextEdit, skill 状态机) ---- */
