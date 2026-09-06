@@ -225,30 +225,6 @@ export default {
         $falcon.navTo('log', {})
         return true
       }
-      if (action === 'check' || action === 'status') {
-        var evt = String(o.callback || 'wifiCheckResult')
-        log('接口', '外部调用: 检测网络, 结果经 $falcon.trigger(' + evt + ') 回调')
-        this.runCheck(function (det) {
-          var result = {
-            status: det.status,
-            needLogin: det.status === 'portal',
-            probe: det.probe,
-            server: det.serverBase || '',
-            portalPage: det.portalPage || '',
-            message:
-              det.status === 'free'
-                ? '无需登入'
-                : det.status === 'portal'
-                  ? '需要登入'
-                  : '无网络连接',
-          }
-          try {
-            $falcon.trigger(evt, result)
-          } catch (e) {}
-          log('接口', '检测结果回调 ' + evt + ': ' + JSON.stringify(result))
-        })
-        return true
-      }
       if (action === 'check') {
         // 检测网络是否需要登入, 结果通过 $falcon.trigger 回传给调用方
         var cb = String(o.callback || 'wifiCheckResult')
@@ -478,6 +454,7 @@ export default {
         self.checking = false
         self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe
         log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
+        self.writeStatus(det)
         if (self._checkCallback) {
           // 外部检测接口: 回传结果 JSON 给调用方 ($falcon.on(回调名) 接收)
           var result = {
