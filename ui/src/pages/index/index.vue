@@ -569,8 +569,15 @@ export default {
       if (typeof onDone !== 'function') onDone = null
       /* 只有用户主动点按钮的重检才保留 _manual; 自动/外部触发的重检清掉该标记,
          使"从后台返回发现已认证"仍能自动进入管理页 */
-      if (manual) this._manual = true
-      else if (!this._leftAt) this._manual = false
+      if (manual) {
+        this._manual = true
+        /* 用户主动重检 = 明确表达"再看看": 解除上一次"服务器不可达"的自动进入抑制,
+         * 让服务器恢复后能重新自动进管理页 (本次因 _manual 不会立即跳转)。 */
+        this._manageTries = 0
+        this._autoManagedAt = 0
+      } else if (!this._leftAt) {
+        this._manual = false
+      }
       var self = this
       var gen = (this._gen = (this._gen || 0) + 1)
       this.stopHeartbeat()

@@ -209,17 +209,22 @@ export default {
           self._fails = (self._fails || 0) + 1
           self.setMsg('认证服务器无响应（' + res.msg + '）', 'error')
           self.emptyText = '服务器无响应'
-          /* 首屏就无法连上服务器: 直接不再等待, 连续失败达阈值即退回主页 */
-          if (self._isConnFail(res) && self._fails >= MAX_FAILS) {
+          /* load_portal_conf 连不上: 会话根本没法建立, 设备列表必然也拿不到。
+           * 这是最明确的失败信号, 直接视为服务器不可用并退回主页,
+           * 不在这里空等 (否则页面会悬空直到被系统回收)。 */
+          if (self._isConnFail(res)) {
             self._serverDead = true
             self.emptyText = '服务器不可达，正在返回…'
             self.stopTimer()
+            /* 让用户看清错误再退出, 但明显短于系统回收时间 */
             if (self._backTimer) clearTimeout(self._backTimer)
             self._backTimer = setTimeout(function () {
               self.goBack()
             }, 1200)
+            return
           }
-          return
+          /* 非网络类错误: 继续尝试拉列表 */
+          self.reload()
         }
         self.reload()
       })
