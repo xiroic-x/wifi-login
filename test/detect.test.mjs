@@ -5,10 +5,10 @@ import { dirname, join } from 'path'
 
 const here = dirname(fileURLToPath(import.meta.url))
 let src = readFileSync(join(here, '..', 'ui', 'src', 'services', 'detect.js'), 'utf8')
-// 去掉依赖固件 http 模块的 import 与联网函数 (checkPortal/firstProbe), 只测纯逻辑
+// 去掉依赖固件 http 模块的 import 与联网函数 (checkPortal), 只测纯逻辑
 src = src.replace(/^import .*$/m, '')
 const start = src.indexOf('export async function checkPortal')
-const end = src.indexOf('function containsBaiduMarker')
+const end = src.indexOf('/* 单个响应分类')
 if (start < 0 || end < 0 || end < start) throw new Error('strip markers not found')
 src = src.slice(0, start) + src.slice(end)
 const { extractRedirect, parsePortalUrl } = await import(

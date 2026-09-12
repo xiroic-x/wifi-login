@@ -9,13 +9,13 @@
         <div class="headbtn headbtn-sm" @click="openAbout">
           <text class="headbtn-text">关于</text>
         </div>
-        <div class="headbtn" @click="runCheck">
+        <div class="headbtn" @click="runCheck(null, true)">
           <text class="headbtn-text">{{ checking ? '检测中…' : '重新检测' }}</text>
         </div>
       </div>
     </div>
 
-    <div class="statusarea" @click="runCheck">
+    <div class="statusarea" @click="runCheck(null, true)">
       <text class="status status-free" v-if="pageState === 'free'">无需登入</text>
       <text class="status status-ok" v-if="pageState === 'ok'">认证成功，无需登入</text>
       <text class="status status-portal" v-if="pageState === 'portal'">需要认证</text>
@@ -61,6 +61,9 @@
       </div>
       <div class="btn btn-busy" v-if="showForm && logging">
         <text class="btn-text">登录中…</text>
+      </div>
+      <div class="btn btn-manage" v-if="canLogout" @click="openManagement">
+        <text class="btn-text">设备管理</text>
       </div>
       <div class="btn btn-logout" v-if="canLogout" @click="doLogout">
         <text class="btn-text btn-text-logout">下 线</text>
@@ -129,6 +132,15 @@ export default {
         if (this.logging) return
         if (this._imeBusy) return
         if (this._imeClosedAt && Date.now() - this._imeClosedAt < 3000) return
+        // 从设备管理页返回: 立即重新检测本机是否已下线, 不受 90 秒节流限制
+        if (this._leftAt) {
+          var away = Date.now() - this._leftAt
+          this._leftAt = 0
+          if (away > 800) {
+            this.runCheck()
+            return
+          }
+        }
         // 从后台回来: 认证会话可能已过期, 停留超过 90 秒未同步则自动重新检测
         var stale = !this._lastSyncAt || Date.now() - this._lastSyncAt > 90000
         if ((this.pageState === 'portal' || this.pageState === 'manual') && stale) {
@@ -220,6 +232,8 @@ export default {
     applyLaunch(o) {
       if (!o) return false
       var action = String(o.action || '').toLowerCase()
+      /* 外部拉起: 整个生命周期内不自动跳转管理页, 避免打断调用方流程 */
+      this._launched = true
       if (action === 'log') {
         log('接口', '外部调用: 打开日志页')
         $falcon.navTo('log', {})
@@ -284,11 +298,15 @@ export default {
     onHide() {
       // 输入会话中 (输入法面板导致的 onHide): 保留会话与心跳, 不当成本页离开
       if (this._imeBusy) return
+      this._leftAt = Date.now()
       this.stopHeartbeat()
       if (this.ime) this.ime.cancel()
     },
     onUnload() {
       this._gen = (this._gen || 0) + 1
+      this._destroyed = true
+      if (this._detectSignal) this._detectSignal.aborted = true
+      if (this._autoManageTimer) clearTimeout(this._autoManageTimer)
       this.stopHeartbeat()
       if (this.ime) {
         this.ime.destroy()
@@ -308,13 +326,40 @@ export default {
       $falcon.navTo('about', {})
     },
 
-    
-    openAbout() {
-      $falcon.navTo('about', {})
+    /* 进入设备管理页: 带上服务器与本机 IP, 管理页直接复用, 不再重复探测 */
+    openManagement() {
+      /* 本机 IP 优先取本次检测的 portal 参数 (wlanuserip), 其次取上次记住的 */
+      var ip = this.paramOf('wlanuserip') || this._selfIp || this._lastIp || ''
+      log('管理页', '打开: server=' + this.serverBase + ' ip=' + ip)
+      $falcon.navTo('management', { serverBase: this.serverBase, ip: ip })
+      // 切走期间停止心跳, 返回时按需重启
+      this.stopHeartbeat()
+      this._leftAt = Date.now()
+    },
+
+    /*
+     * 已认证时自动进入设备管理页。
+     * 外部调用 (action=check/login) 场景不自动跳转, 否则会打断调用方的流程/页面。
+     * 返回 true 表示已触发跳转。
+     */
+    _autoManage() {
+      if (this._checkCallback) return false // 外部检测接口: 只回调, 不跳页
+      if (this._launched) return false // 外部拉起场景: 尊重调用方
+      if (this._manual) return false // 用户主动点了重新检测/下线: 保持本页反馈
+      if (this._autoManagedAt && Date.now() - this._autoManagedAt < 5000) return false // 防抖
+      if (this._destroyed) return false
+      this._autoManagedAt = Date.now()
+      var self = this
+      // 稍作停留让用户看到状态, 再跳转
+      this._autoManageTimer = setTimeout(function () {
+        if (self._destroyed) return
+        if (!self.serverBase) return
+        self.openManagement()
+      }, 800)
+      return true
     },
 
     /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
-/* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
     writeStatus(det) {
       try {
         var d = new Date()
@@ -417,7 +462,7 @@ export default {
             self.pageState = 'ok'
             self.showForm = false
             self.canLogout = true
-            self.setMsg('该设备已通过认证，无需登入', 'info')
+            self.setMsg('该设备已通过认证，无需登入，可点「设备管理」查看在线设备', 'info')
           } else if (res.ok) {
             self._lastSyncAt = Date.now()
           }
@@ -432,12 +477,21 @@ export default {
     },
 
     /* ---- 连通性测试 ---- */
-    /* onDone: 可选, 检测完成后回调 (外部 check 接口用) */
-    runCheck(onDone) {
+    /* onDone: 可选, 检测完成后回调 (外部 check 接口用)
+     * manual: true 表示用户主动触发 (点按钮), 检测出已认证时不自动跳管理页,
+     *         只在当前页给出"设备管理"按钮, 避免界面自己跳走 */
+    runCheck(onDone, manual) {
       if (typeof onDone !== 'function') onDone = null
+      /* 只有用户主动点按钮的重检才保留 _manual; 自动/外部触发的重检清掉该标记,
+         使"从后台返回发现已认证"仍能自动进入管理页 */
+      if (manual) this._manual = true
+      else if (!this._leftAt) this._manual = false
       var self = this
       var gen = (this._gen = (this._gen || 0) + 1)
       this.stopHeartbeat()
+      /* 取消上一次仍可能返回的探测, 避免迟到结果覆盖本次状态 */
+      if (this._detectSignal) this._detectSignal.aborted = true
+      var signal = (this._detectSignal = { aborted: false })
       this.checking = true
       this.pageState = 'busy'
       this.setMsg('正在进行 WiFi 连通性测试…', 'info')
@@ -445,8 +499,9 @@ export default {
       this.showForm = false
       this.showManualServer = false
 
-      checkPortal().then(function (det) {
+      checkPortal({ signal: signal }).then(function (det) {
         if (gen !== self._gen) return
+        if (det.status === 'aborted') return
         self.checking = false
         self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe
         log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
@@ -474,10 +529,18 @@ export default {
         }
         if (det.status === 'free') {
           self.pageState = 'free'
-          self.serverBase = ''
-          self.serverShow = ''
           self.portalPage = ''
           self.setMsg('网络直连正常，无需登入', 'info')
+          /* 已可上网: 若已知认证服务器, 直接进入设备管理 (无服务器则仅提示) */
+          if (self._lastServer) {
+            self.serverBase = self._lastServer
+            self.serverShow = self._lastServer.replace('http://', '')
+            self.canLogout = true
+            if (self._autoManage()) return
+          } else {
+            self.serverBase = ''
+            self.serverShow = ''
+          }
           return
         }
         if (det.status === 'offline') {
@@ -507,6 +570,8 @@ export default {
       var self = this
       var p = params || {}
       this._params = p
+      this._selfIp = p.wlanuserip || ''
+      if (this._selfIp) this._lastIp = this._selfIp
       var ipDesc = []
       if (p.wlanuserip) ipDesc.push('IP ' + p.wlanuserip)
       if (p.clientmac) ipDesc.push('MAC ' + p.clientmac)
@@ -542,8 +607,11 @@ export default {
           log('配置', 'code=200 已通过认证 server=' + serverBase)
           self.pageState = 'ok'
           self.showForm = false
+          self.canLogout = true
           self.stopHeartbeat()
           self.setMsg('该设备已通过认证，无需登入', 'info')
+          /* 已认证: 直接进入设备管理页 (外部调用场景不跳) */
+          self._autoManage()
           return
         }
         if (res.ok && res.code === 0 && res.data && res.data.policy) {
@@ -721,8 +789,9 @@ export default {
 
     verifyOnline(gen) {
       var self = this
-      checkPortal().then(function (det) {
+      checkPortal({ signal: this._detectSignal }).then(function (det) {
         if (gen !== self._gen) return
+        if (det.status === 'aborted') return
         self.logging = false
         log('复查', det.status)
         if (det.status === 'free') {
@@ -732,6 +801,8 @@ export default {
           self.probeName = det.probe
           self.stopHeartbeat()
           self.setMsg('认证成功，已可上网', 'info')
+          /* 登录成功后已认证: 直接进入设备管理页 (外部调用场景不跳) */
+          self._autoManage()
         } else if (det.status === 'portal') {
           self.pageState = 'portal'
           self.showForm = true
@@ -918,6 +989,10 @@ export default {
 .btn-busy {
   width: 120px;
   background-color: #274d7c;
+}
+.btn-manage {
+  width: 140px;
+  background-color: #2c5aa0;
 }
 .btn-logout {
   width: 100px;

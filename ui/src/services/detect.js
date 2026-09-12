@@ -4,14 +4,20 @@
  *   - 小米:   http://connect.rom.miui.com/generate_204  (正常返回 204 空包体)
  *   - vivo:   http://wifi.vivo.com.cn/generate_204
  *   - 华为:   http://connectivitycheck.platform.hicloud.com/generate_204
- *   - 辅助:   http://www.baidu.com  (正常返回含 baidu 标记的页面)
- * 判定逻辑:
- *   204 探测任一返回空包体 + baidu 返回含 baidu 标记      -> free  (无需登入)
- *   204 探测非空包体 / baidu 返回非 baidu 内容            -> portal(被强制门户劫持)
- *   全部请求失败                                          -> offline
+ * 判定逻辑 (全部探测源并发竞速, 首个确定结果即返回, 不再顺序等待):
+ *   - 302 + Location                        -> portal (直接拿到跳转页面)
+ *   - 204 空包体                            -> free   (无需登入)
+ *   - 非空包体 (被劫持/被改写, 且无跳转URL) -> portal
+ *   - 全部请求失败                          -> offline
  * 被劫持时从响应内容里解析跳转页面 URL (Panabit 302 Location 透传 /
  * meta refresh / location.href / 带 wlanuserip、paip 参数的链接),
  * 得到 portal 服务器 IP:PORT 与认证参数。
+ *
+ * 性能/并发设计:
+ *  - 原实现逐个探测源串行等待, 最坏 4×TIMEOUT; 现改为同时发起全部请求,
+ *    谁先给出确定结论就用谁, 正常网络下耗时 ≈ 单个请求 RTT。
+ *  - 失败 (error) 不算结论, 继续等其他探测源, 全部失败才判 offline。
+ *  - 支持 abort: 页面切前台/离开时可主动取消, 避免残留请求回来后覆盖新状态。
  */
 
 import { request } from './net.js'
@@ -21,48 +27,59 @@ var PROBES = [
   { name: 'vivo', url: 'http://wifi.vivo.com.cn/generate_204' },
   { name: '华为', url: 'http://connectivitycheck.platform.hicloud.com/generate_204' },
 ]
-var BAIDU = { name: '百度', url: 'http://www.baidu.com/' }
-var TIMEOUT = 6
+var TIMEOUT = 5
 
 /*
  * 返回:
  * {
- *   status: 'free' | 'portal' | 'offline',
+ *   status: 'free' | 'portal' | 'offline' | 'aborted',
  *   probe: 使用的探测源名, portalPage: 跳转页面 URL,
  *   serverIp, serverPort, serverBase,
  *   params: { wlanuserip, clientmac, vlan, iarmdst, paip, clientip, wlanacname },
  *   pageTitle: 拦截页 <title>, snippet: 原始片段(截断)
  * }
+ *
+ * opts.signal: 可选, { aborted: bool } 形式的取消标记 (页面离开/重新检测时置位),
+ *   置位后不再采纳迟到的响应, 返回 status='aborted'。
  */
-export async function checkPortal() {
-  var baidu = await request({ url: BAIDU.url, timeout: TIMEOUT })
-  var c = classify(baidu)
-
-  // 302 + Location: 直接拿到跳转页面 (panet 不跟随重定向)
-  if (c.kind === 'redirect') {
-    return portalResult(BAIDU.name, c.url, baidu)
-  }
-  if (c.kind === 'content' && containsBaiduMarker(baidu.text)) {
-    // baidu 正常, 再用 204 探测源双确认
-    var p = await firstProbeChecked()
-    if (p) return p
-    return freeResult(BAIDU.name)
+export async function checkPortal(opts) {
+  var o = opts || {}
+  var signal = o.signal || null
+  var aborted = function () {
+    return !!(signal && signal.aborted)
   }
 
-  // baidu 空/被劫持/失败: 逐个 204 探测源判定
-  var lastErr = ''
-  for (var i = 0; i < PROBES.length; i++) {
-    var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
-    var rc = classify(r)
-    if (rc.kind === 'redirect') return portalResult(PROBES[i].name, rc.url, r)
-    if (rc.kind === 'empty') return freeResult(PROBES[i].name)
-    if (rc.kind === 'content') return portalResult(PROBES[i].name, extractRedirect(r.text), r)
-    if (r.error) lastErr = PROBES[i].name + ': ' + r.error
-  }
+  var settled = false
+  var pending = PROBES.length
 
-  var off = offlineResult()
-  off.error = lastErr
-  return off
+  var result = await new Promise(function (resolve) {
+    var finish = function (r) {
+      if (settled) return
+      settled = true
+      resolve(r)
+    }
+    /* 所有探测源并发发起; error 不判决, 等其它源或全部失败 */
+    for (var i = 0; i < PROBES.length; i++) {
+      ;(function (probe) {
+        request({ url: probe.url, timeout: TIMEOUT }).then(function (r) {
+          if (aborted()) return finish({ status: 'aborted' })
+          var c = classify(r)
+          if (c.kind === 'redirect') return finish(portalResult(probe.name, c.url, r))
+          if (c.kind === 'empty') return finish(freeResult(probe.name))
+          if (c.kind === 'content') return finish(portalResult(probe.name, extractRedirect(r.text), r))
+          /* error: 记录后继续等其它源 */
+          pending--
+          if (pending === 0) {
+            var off = offlineResult()
+            off.error = probe.name + ': ' + (r.error || '无响应')
+            finish(off)
+          }
+        })
+      })(PROBES[i])
+    }
+  })
+
+  return result
 }
 
 /* 单个响应分类: redirect(302+Location) / empty(204) / content / error */
@@ -73,18 +90,6 @@ function classify(r) {
   }
   if (r.body.length === 0) return { kind: 'empty' }
   return { kind: 'content' }
-}
-
-/* 探测源依次判定, 返回 null 表示全部请求失败 */
-async function firstProbeChecked() {
-  for (var i = 0; i < PROBES.length; i++) {
-    var r = await request({ url: PROBES[i].url, timeout: TIMEOUT })
-    var c = classify(r)
-    if (c.kind === 'redirect') return portalResult(PROBES[i].name, c.url, r)
-    if (c.kind === 'empty') return freeResult(PROBES[i].name)
-    if (c.kind === 'content') return portalResult(PROBES[i].name, extractRedirect(r.text), r)
-  }
-  return null
 }
 
 function portalResult(probe, redirectUrl, resp) {
@@ -102,10 +107,6 @@ function portalResult(probe, redirectUrl, resp) {
     pageTitle: extractTitle(bodyText),
     snippet: bodyText.slice(0, 400),
   }
-}
-
-function containsBaiduMarker(text) {
-  return /baidu\.com|百度|Baidu/i.test(text)
 }
 
 function freeResult(probe) {

@@ -5,7 +5,9 @@
  *   - 账号密码登录: route=webauth&action=user_login
  *   - 配置/策略:    route=portal&action=load_portal_conf
  *   - 认证状态查询: route=webauth&action=query_auth_stat
- *   - 下线:         route=ucenter&action=user_offall (ucenter 页面提取)
+ *   - 下线当前设备: route=ucenter&action=user_offall (ucenter 页面提取)
+ *   - 在线设备列表: route=ucenter&action=load_user_list
+ *   - 单设备下线:   route=ucenter&action=user_offone&addr=<ip>
  *   - 响应: JSON, code==0 成功; 中文为 GB2312 编码, 这里只保留 ASCII
  *     (错误文案用本地映射, 避免 GBK 依赖)
  *   - username/password 用 AES-128-ECB/ZeroPadding(密钥 Panabit@1024_key) 加密后传 hex
@@ -123,5 +125,33 @@ export function logout(serverBase, opts) {
     route: 'ucenter',
     action: 'user_offall',
     ip: o.ip || '',
+  })
+}
+
+/*
+ * 在线设备列表 (ucenter load_user_list)
+ * data: [{ name, ipstr, clntmac, birth, uid, ... }]
+ *   name: 设备/账号名, ipstr: 在线 IP, clntmac: MAC, birth: 上线时间(在线时长)
+ * 从管理页 (管理/index.html getApplication) 提取。
+ */
+export function loadUserList(serverBase, opts) {
+  var o = opts || {}
+  return apiCall(serverBase, {
+    route: 'ucenter',
+    action: 'load_user_list',
+    ip: o.ip || '',
+  })
+}
+
+/*
+ * 单设备下线 (ucenter user_offone), addr = 目标设备在线 IP
+ * 从管理页 (管理/index.html off_ajax) 提取。
+ */
+export function userOffOne(serverBase, opts) {
+  var o = opts || {}
+  return apiCall(serverBase, {
+    route: 'ucenter',
+    action: 'user_offone',
+    addr: o.addr || '',
   })
 }

@@ -13,8 +13,10 @@
       <text class="row">版本: {{ version }}</text>
       <text class="row">appid: {{ appid }}</text>
       <text class="section">功能</text>
-      <text class="row">- WiFi 连通性测试 (国内探测源), 无需登入时提示</text>
+      <text class="row">- WiFi 连通性测试 (国内探测源并发竞速), 无需登入时提示</text>
       <text class="row">- Panabit Portal 账号密码登录, 记住密码</text>
+      <text class="row">- 设备管理: 在线设备列表 / 单设备下线 / 全部下线</text>
+      <text class="row">- 已认证时自动进入设备管理页</text>
       <text class="row">- 会话过期自动刷新 + 心跳保活</text>
       <text class="row">- 探测不到服务器时可手动输入 IP:端口</text>
       <text class="section">外部调用</text>

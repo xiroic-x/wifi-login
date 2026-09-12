@@ -1,6 +1,7 @@
 # 模拟 Panabit Portal 认证服务器 (GB2312 响应), 用于真机端到端联调
 # 用法: python mock_panabit.py [port]  默认 8080
 import base64
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -51,6 +52,27 @@ class Handler(BaseHTTPRequestHandler):
                 body = '{"msg":"认证失败:INV_NAMEORPWD","code":255,"data":null}'
         elif action == "query_auth_stat":
             body = '{"msg":"成功","code":0,"data":{"stat":%d}}' % (1 if AUTH["ok"] else 0)
+        elif action == "load_user_list":
+            # 在线设备列表 (管理页 getApplication 提取的字段)
+            devices = []
+            if AUTH["ok"]:
+                devices = [
+                    {"uid": 1, "name": "当前设备", "ipstr": "192.168.50.11",
+                     "clntmac": "aa:cc:09:c5:19:be", "birth": "00:12:33"},
+                    {"uid": 2, "name": "同学的手机", "ipstr": "192.168.50.23",
+                     "clntmac": "b8:27:eb:11:22:33", "birth": "01:05:02"},
+                ]
+            body = '{"msg":"成功","code":0,"data":%s}' % json.dumps(devices)
+        elif action == "user_offone":
+            addr = q.get("addr", "")
+            print("OFFONE addr=%s" % addr, flush=True)
+            if AUTH["ok"]:
+                body = '{"msg":"成功","code":0,"data":null}'
+            else:
+                body = '{"msg":"无该在线用户","code":1,"data":null}'
+        elif action == "user_offall":
+            AUTH["ok"] = False
+            body = '{"msg":"成功","code":0,"data":null}'
         elif action == "sms_send_code":
             body = '{"msg":"成功","code":0,"data":{"left":60}}'
         else:
