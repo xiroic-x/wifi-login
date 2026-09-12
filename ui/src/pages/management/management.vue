@@ -127,8 +127,13 @@ export default {
     _notifyClosed() {
       if (this._closed) return
       this._closed = true
+      /* 判定"服务器不可用"的三种情形:
+       *   1) 已明确标记服务器不可达 (_serverDead)
+       *   2) 从未成功拉到过设备列表 (_loadedOnce 为假) —— 说明页面开了但没跑通
+       * 两者都通知主页进入冷却, 避免系统快速回收页面时主页拿不到失败信号而反复跳。 */
+      var bad = this._serverDead || !this._loadedOnce
       try {
-        $falcon.trigger('wifiManageClosed', this._serverDead ? 'failed' : 'ok')
+        $falcon.trigger('wifiManageClosed', bad ? 'failed' : 'ok')
       } catch (e) {}
     },
 
@@ -256,6 +261,7 @@ export default {
           return
         }
         self._fails = 0
+        self._loadedOnce = true // 成功拿到过列表: 关闭时不再按"没跑通"处理
         var list = Array.isArray(res.data) ? res.data : []
         self.devices = list.map(function (d) {
           return {

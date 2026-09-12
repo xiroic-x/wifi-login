@@ -30,12 +30,13 @@ function makeCtx() {
   const ctx = {
     _manageTries: 0,
     _autoManagedAt: 0,
+    _manageCooldownUntil: 0,
     _leftAt: 0,
     setMsg: (t) => logs.push('msg:' + t),
   }
   // eslint-disable-next-line no-new-func
-  const fn = new Function('log', 'return function (info) {' + m[1] + '}')
-  ctx._fn = fn((a, b) => logs.push(a + ':' + b)).bind(ctx)
+  const fn = new Function('log', 'MANAGE_COOLDOWN_MS', 'return function (info) {' + m[1] + '}')
+  ctx._fn = fn((a, b) => logs.push(a + ':' + b), 180000).bind(ctx)
   return ctx
 }
 
@@ -45,6 +46,7 @@ function makeCtx() {
   c._fn('failed')
   expect("字符串 'failed': 抑制计数", c._manageTries, 2)
   expect("字符串 'failed': 不设 _leftAt (不重检)", c._leftAt, 0)
+  expect("字符串 'failed': 设置冷却窗", c._manageCooldownUntil > Date.now(), true)
   expect("字符串 'failed': 给出提示", logs.some((l) => l.startsWith('msg:')), true)
 }
 
@@ -71,11 +73,12 @@ function makeCtx() {
   expect('嵌套对象: 抑制计数', c._manageTries, 2)
 }
 
-/* 3. 正常关闭 'ok': 设置 _leftAt 以便返回重检, 不抑制 */
+/* 3. 正常关闭 'ok': 设置 _leftAt 以便返回重检, 不抑制也不设冷却 */
 {
   const c = makeCtx()
   c._fn('ok')
   expect("字符串 'ok': 不抑制", c._manageTries, 0)
+  expect("字符串 'ok': 不设冷却", c._manageCooldownUntil, 0)
   expect("字符串 'ok': 设置 _leftAt", c._leftAt > 0, true)
 }
 {

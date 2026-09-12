@@ -101,6 +101,9 @@ import { log, initLog } from '../../services/logger.js'
 import { Panet } from 'panet'
 import { SystemIme } from '../../services/ime.js'
 
+/* 管理页判定"服务器不可用"后, 这段时间内不再自动进入 (用户手动重检可立即解除) */
+const MANAGE_COOLDOWN_MS = 180000
+
 export default {
   name: 'index',
   data() {
@@ -384,6 +387,10 @@ export default {
       if (this._destroyed) return false
       // 管理页没能用起来 (服务器连不上) 时不要反复来回跳, 最多自动进 2 次
       if ((this._manageTries || 0) >= 2) return false
+      /* 冷却窗口: 管理页最近一次是"服务器不可达"退出时, 一段时间内不再自动进入。
+       * 用时间窗而非仅计数, 是因为系统可能在管理页开启后很快回收它
+       * (实测 3 秒即 onUnload), 那种情况下主页拿不到 failed 标记, 单靠计数会漏。 */
+      if (this._manageCooldownUntil && Date.now() < this._manageCooldownUntil) return false
       if (this._autoManagedAt && Date.now() - this._autoManagedAt < 8000) return false // 防抖
       this._autoManagedAt = Date.now()
       this._manageTries = (this._manageTries || 0) + 1
@@ -397,9 +404,10 @@ export default {
       return true
     },
 
-    /* 管理页成功拉到设备列表后回调, 重置自动进入计数 */
+    /* 管理页成功拉到设备列表后回调, 重置自动进入计数与冷却 */
     _manageUsable() {
       this._manageTries = 0
+      this._manageCooldownUntil = 0
     },
 
     /*
@@ -427,10 +435,12 @@ export default {
       }
       log('管理页', '已关闭 failed=' + failed)
       /* 管理页明确报告服务器不可用: 抑制后续自动进入, 且不做无意义的重检
-       * (此时检测结果必然还是 free, 重检只会再触发一次跳转) */
+       * (此时检测结果必然还是 free, 重检只会再触发一次跳转)。
+       * 同时设冷却窗: 服务器没那么快恢复, 短期内不再打扰用户。 */
       if (failed) {
         this._manageTries = 2
         this._autoManagedAt = Date.now()
+        this._manageCooldownUntil = Date.now() + MANAGE_COOLDOWN_MS
         this._leftAt = 0
         this.setMsg('认证服务器不可达，已退出设备管理', 'warn')
         return
@@ -571,10 +581,11 @@ export default {
          使"从后台返回发现已认证"仍能自动进入管理页 */
       if (manual) {
         this._manual = true
-        /* 用户主动重检 = 明确表达"再看看": 解除上一次"服务器不可达"的自动进入抑制,
+        /* 用户主动重检 = 明确表达"再看看": 解除上一次"服务器不可达"的抑制与冷却,
          * 让服务器恢复后能重新自动进管理页 (本次因 _manual 不会立即跳转)。 */
         this._manageTries = 0
         this._autoManagedAt = 0
+        this._manageCooldownUntil = 0
       } else if (!this._leftAt) {
         this._manual = false
       }
