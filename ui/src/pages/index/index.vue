@@ -152,6 +152,13 @@ export default {
       this.ime = new SystemIme()
       initLog()
       log('应用', '页面启动')
+      // 管理页确认服务器可用时, 重置自动进入次数限制
+      var self0 = this
+      try {
+        this._manageUsableToken = $falcon.on('wifiManageUsable', function () {
+          self0._manageUsable()
+        })
+      } catch (e) {}
       var self = this
       // == DEBUG: 真机联调开关, 验证完删除 ==
       var DBG = null // 联调开关: 设为 { server, username, password } 可跳过探测直连指定服务器
@@ -307,6 +314,9 @@ export default {
       this._destroyed = true
       if (this._detectSignal) this._detectSignal.aborted = true
       if (this._autoManageTimer) clearTimeout(this._autoManageTimer)
+      try {
+        if (this._manageUsableToken) $falcon.off('wifiManageUsable', this._manageUsableToken)
+      } catch (e) {}
       this.stopHeartbeat()
       if (this.ime) {
         this.ime.destroy()
@@ -346,9 +356,12 @@ export default {
       if (this._checkCallback) return false // 外部检测接口: 只回调, 不跳页
       if (this._launched) return false // 外部拉起场景: 尊重调用方
       if (this._manual) return false // 用户主动点了重新检测/下线: 保持本页反馈
-      if (this._autoManagedAt && Date.now() - this._autoManagedAt < 5000) return false // 防抖
       if (this._destroyed) return false
+      // 管理页没能用起来 (服务器连不上) 时不要反复来回跳, 最多自动进 2 次
+      if ((this._manageTries || 0) >= 2) return false
+      if (this._autoManagedAt && Date.now() - this._autoManagedAt < 5000) return false // 防抖
       this._autoManagedAt = Date.now()
+      this._manageTries = (this._manageTries || 0) + 1
       var self = this
       // 稍作停留让用户看到状态, 再跳转
       this._autoManageTimer = setTimeout(function () {
@@ -357,6 +370,11 @@ export default {
         self.openManagement()
       }, 800)
       return true
+    },
+
+    /* 管理页成功拉到设备列表后回调, 重置自动进入计数 */
+    _manageUsable() {
+      this._manageTries = 0
     },
 
     /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */

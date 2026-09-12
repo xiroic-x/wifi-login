@@ -221,6 +221,10 @@ export default {
           }
         })
         log('管理页', '设备列表 ' + self.devices.length + ' 台')
+        /* 通知主页: 管理页可用 (服务器正常), 不要因连不上而限制后续自动进入 */
+        try {
+          $falcon.trigger('wifiManageUsable', '1')
+        } catch (e) {}
         if (!self.devices.length) {
           self.emptyText = '暂无在线设备'
           self.setMsg('当前无在线设备', 'info')
