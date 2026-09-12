@@ -405,15 +405,37 @@ export default {
     /*
      * 管理页已关闭 (用户点返回 / 全部下线后自动退 / 加载失败兜底退出)。
      * 此时才认为真的"离开过又回来了", 打上 _leftAt 以便 onShow 立即重检。
+     * 注意: $falcon 事件回调未必原样传字符串 (实测会拿到对象包装), 两种形态都兼容。
      */
     _manageClosed(info) {
-      log('管理页', '已关闭 ' + (info || ''))
-      this._leftAt = Date.now()
-      /* 管理页明确报告服务器不可用: 抑制后续自动进入, 直到用户手动重检 */
-      if (info && info.failed) {
+      var failed = false
+      if (info === 'failed' || info === undefined) {
+        failed = info === 'failed'
+      } else if (info && typeof info === 'object') {
+        /* 事件系统可能把参数包成 {0:'failed'} / {detail:'failed'} / {data:...} */
+        var v = info[0] !== undefined ? info[0] : info.detail !== undefined ? info.detail : info.data
+        if (v && typeof v === 'object') v = v[0] !== undefined ? v[0] : v.value
+        failed = v === 'failed'
+        /* 兜底: 对象里任何字段序列化后含 failed 即视为失败退出 */
+        if (!failed) {
+          try {
+            failed = JSON.stringify(info).indexOf('failed') >= 0
+          } catch (e) {}
+        }
+      } else {
+        failed = String(info).indexOf('failed') >= 0
+      }
+      log('管理页', '已关闭 failed=' + failed)
+      /* 管理页明确报告服务器不可用: 抑制后续自动进入, 且不做无意义的重检
+       * (此时检测结果必然还是 free, 重检只会再触发一次跳转) */
+      if (failed) {
         this._manageTries = 2
         this._autoManagedAt = Date.now()
+        this._leftAt = 0
+        this.setMsg('认证服务器不可达，已退出设备管理', 'warn')
+        return
       }
+      this._leftAt = Date.now()
     },
 
     /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
