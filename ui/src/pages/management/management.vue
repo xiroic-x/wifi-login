@@ -72,6 +72,8 @@ import { log } from '../../services/logger.js'
 const REFRESH_MS = 15000
 /* 列表超过该时长未刷新则视为过期, 回到前台时自动拉取 */
 const STALE_MS = 20000
+/* 服务器持续不可达时, 连续失败该次数后自动退回主页, 避免用户困在管理页 */
+const MAX_FAILS = 2
 
 export default {
   name: 'management',
@@ -117,6 +119,17 @@ export default {
     },
     onUnload() {
       this.stopTimer()
+      if (this._backTimer) clearTimeout(this._backTimer)
+      this._notifyClosed()
+    },
+
+    /* 通知主页: 本页已关闭 (主页据此立即重检) */
+    _notifyClosed() {
+      if (this._closed) return
+      this._closed = true
+      try {
+        $falcon.trigger('wifiManageClosed', this._serverDead ? 'failed' : 'ok')
+      } catch (e) {}
     },
 
     /* 读取外部传入参数 (主页 navTo 时带的 server/ip) */
@@ -170,6 +183,12 @@ export default {
       this.msgType = type || 'info'
     },
 
+    /* 判断是否"连不上服务器"类错误 (区别于业务错误): 这类失败才触发自动退出 */
+    _isConnFail(res) {
+      var s = ((res && res.msg) || '') + ''
+      return /connect failed|timeout|timed out|errno=|无响应|网络请求失败|EHOSTUNREACH|ECONNREFUSED|ETIMEDOUT/i.test(s)
+    },
+
     /* 首次进入: 先确保会话可用 (load_portal_conf), 再拉设备列表 */
     bootstrap() {
       var self = this
@@ -187,8 +206,19 @@ export default {
           self.selfIp = self.selfIp || ''
         } else if (res && res.code === -1) {
           self.loading = false
+          self._fails = (self._fails || 0) + 1
           self.setMsg('认证服务器无响应（' + res.msg + '）', 'error')
           self.emptyText = '服务器无响应'
+          /* 首屏就无法连上服务器: 直接不再等待, 连续失败达阈值即退回主页 */
+          if (self._isConnFail(res) && self._fails >= MAX_FAILS) {
+            self._serverDead = true
+            self.emptyText = '服务器不可达，正在返回…'
+            self.stopTimer()
+            if (self._backTimer) clearTimeout(self._backTimer)
+            self._backTimer = setTimeout(function () {
+              self.goBack()
+            }, 1200)
+          }
           return
         }
         self.reload()
@@ -204,11 +234,23 @@ export default {
         self.loading = false
         self._lastLoadAt = Date.now()
         if (!res.ok) {
-          log('管理页', 'load_user_list 失败 code=' + res.code + ' msg=' + res.msg)
+          self._fails = (self._fails || 0) + 1
+          log('管理页', 'load_user_list 失败 code=' + res.code + ' msg=' + res.msg + ' (' + self._fails + '/' + MAX_FAILS + ')')
           self.setMsg('获取设备列表失败：' + (res.msg || '未知错误'), 'error')
           self.emptyText = '获取失败，请点刷新'
+          /* 网络类失败 (连不上服务器) 连续多次 -> 自动退回主页, 不再空转 */
+          if (self._isConnFail(res) && self._fails >= MAX_FAILS) {
+            self._serverDead = true
+            self.emptyText = '服务器不可达，正在返回…'
+            self.stopTimer()
+            if (self._backTimer) clearTimeout(self._backTimer)
+            self._backTimer = setTimeout(function () {
+              self.goBack()
+            }, 1200)
+          }
           return
         }
+        self._fails = 0
         var list = Array.isArray(res.data) ? res.data : []
         self.devices = list.map(function (d) {
           return {
@@ -321,7 +363,8 @@ export default {
     },
 
     goBack() {
-      if (this._backTimer) clearTimeout(this._backTimer)
+      this.stopTimer()
+      this._notifyClosed()
       this.$page.finish()
     },
   },

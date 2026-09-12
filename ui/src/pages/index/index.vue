@@ -49,7 +49,9 @@
       </div>
       <div class="field" v-if="showForm" @click="editPassword">
         <text class="fieldlabel">密码</text>
-        <text class="fieldvalue" v-if="password">{{ password }}</text>
+        <!-- 已记住的密码不显示明文, 仅显示掩码长度; 新输入的密码短暂可见 -->
+        <text class="fieldvalue" v-if="pwdMask && !pwdRevealed">{{ pwdMask }}</text>
+        <text class="fieldvalue" v-if="password && pwdRevealed">{{ password }}</text>
         <text class="fieldvalue fieldplaceholder" v-if="!password">点此输入密码</text>
       </div>
       <div class="remember" v-if="showForm" @click="toggleRemember">
@@ -94,6 +96,7 @@
 import { checkPortal } from '../../services/detect.js'
 import { loadPortalConf, userLogin, queryAuthStat, logout } from '../../services/portal.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
+import { wifiSsid } from '../../services/net.js'
 import { log, initLog } from '../../services/logger.js'
 import { Panet } from 'panet'
 import { SystemIme } from '../../services/ime.js'
@@ -112,6 +115,10 @@ export default {
       sceneStr: '',
       username: '',
       password: '',
+      /* 已记住的密码来源SSID: 用于掩码显示与"按网络隔离"提示 */
+      ssid: '',
+      /* 本次新输入的密码短暂明文显示, 记住的密码始终只显示掩码 */
+      pwdRevealed: false,
       remember: false,
       logging: false,
       checking: false,
@@ -123,7 +130,12 @@ export default {
       msgType: 'info',
     }
   },
-  computed: {},
+  computed: {
+    /* 已记住密码的掩码: 不泄露真实长度与内容, 固定 8 位圆点 */
+    pwdMask() {
+      return this.password ? '\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf' : ''
+    },
+  },
   methods: {
     onShow() {
       if (this._started) {
@@ -132,14 +144,14 @@ export default {
         if (this.logging) return
         if (this._imeBusy) return
         if (this._imeClosedAt && Date.now() - this._imeClosedAt < 3000) return
-        // 从设备管理页返回: 立即重新检测本机是否已下线, 不受 90 秒节流限制
+        // 从设备管理页返回 (由管理页 trigger('wifiManageClosed') 打标):
+        // 立即重新检测本机是否已下线, 不受 90 秒节流限制。
+        // _leftAt 只在管理页真正关闭时才被设置, 管理页在前台时不会被误触。
         if (this._leftAt) {
-          var away = Date.now() - this._leftAt
           this._leftAt = 0
-          if (away > 800) {
-            this.runCheck()
-            return
-          }
+          this._enteredManageAt = 0
+          this.runCheck()
+          return
         }
         // 从后台回来: 认证会话可能已过期, 停留超过 90 秒未同步则自动重新检测
         var stale = !this._lastSyncAt || Date.now() - this._lastSyncAt > 90000
@@ -157,6 +169,9 @@ export default {
       try {
         this._manageUsableToken = $falcon.on('wifiManageUsable', function () {
           self0._manageUsable()
+        })
+        this._manageClosedToken = $falcon.on('wifiManageClosed', function (info) {
+          self0._manageClosed(info)
         })
       } catch (e) {}
       var self = this
@@ -179,11 +194,17 @@ export default {
       }
       // 外部小程序调用接口 (见 applyLaunch)
       if (self.applyLaunch(self.readLaunchOptions())) return
-      loadAccount().then(function (acc) {
+      /* 先取当前 WiFi 名称, 再按名称读对应账号 (不同门店/网络各存各的密码) */
+      wifiSsid().then(function (ssid) {
+        self._ssid = ssid || ''
+        return loadAccount(self._ssid)
+      }).then(function (acc) {
         self.username = acc.username
         self.password = acc.password
         self.remember = acc.remember
+        self.ssid = self._ssid || acc.ssid || ''
         self._lastServer = acc.serverBase || ''
+        log('配置', 'wifi=' + (self._ssid || '(未知)') + ' 已存账号=' + (acc.username || '无'))
         self.runCheck()
       })
     },
@@ -316,6 +337,7 @@ export default {
       if (this._autoManageTimer) clearTimeout(this._autoManageTimer)
       try {
         if (this._manageUsableToken) $falcon.off('wifiManageUsable', this._manageUsableToken)
+        if (this._manageClosedToken) $falcon.off('wifiManageClosed', this._manageClosedToken)
       } catch (e) {}
       this.stopHeartbeat()
       if (this.ime) {
@@ -344,7 +366,10 @@ export default {
       $falcon.navTo('management', { serverBase: this.serverBase, ip: ip })
       // 切走期间停止心跳, 返回时按需重启
       this.stopHeartbeat()
-      this._leftAt = Date.now()
+      /* 注意: 这里不设 _leftAt。管理页在前台时本页 onShow 也可能被系统调用,
+       * 若提前打上离开标记, 管理页还开着就会被误判为"已返回"而触发重检,
+       * 形成 主页->管理页 空转。真正返回时由管理页 trigger('wifiManageClosed') 设置。 */
+      this._enteredManageAt = Date.now()
     },
 
     /*
@@ -359,7 +384,7 @@ export default {
       if (this._destroyed) return false
       // 管理页没能用起来 (服务器连不上) 时不要反复来回跳, 最多自动进 2 次
       if ((this._manageTries || 0) >= 2) return false
-      if (this._autoManagedAt && Date.now() - this._autoManagedAt < 5000) return false // 防抖
+      if (this._autoManagedAt && Date.now() - this._autoManagedAt < 8000) return false // 防抖
       this._autoManagedAt = Date.now()
       this._manageTries = (this._manageTries || 0) + 1
       var self = this
@@ -375,6 +400,20 @@ export default {
     /* 管理页成功拉到设备列表后回调, 重置自动进入计数 */
     _manageUsable() {
       this._manageTries = 0
+    },
+
+    /*
+     * 管理页已关闭 (用户点返回 / 全部下线后自动退 / 加载失败兜底退出)。
+     * 此时才认为真的"离开过又回来了", 打上 _leftAt 以便 onShow 立即重检。
+     */
+    _manageClosed(info) {
+      log('管理页', '已关闭 ' + (info || ''))
+      this._leftAt = Date.now()
+      /* 管理页明确报告服务器不可用: 抑制后续自动进入, 直到用户手动重检 */
+      if (info && info.failed) {
+        this._manageTries = 2
+        this._autoManagedAt = Date.now()
+      }
     },
 
     /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
@@ -454,6 +493,12 @@ export default {
       }).then(function (v) {
         if (v == null) return
         self.password = v.replace(/^\s+|\s+$/g, '')
+        /* 用户刚录入的密码明文显示 3 秒便于核对, 之后回到掩码 */
+        self.pwdRevealed = true
+        if (self._revealTimer) clearTimeout(self._revealTimer)
+        self._revealTimer = setTimeout(function () {
+          self.pwdRevealed = false
+        }, 3000)
       })
     },
 
@@ -694,9 +739,9 @@ export default {
     },
     saveServer(base) {
       var self = this
-      loadAccount().then(function (acc) {
+      loadAccount(self._ssid).then(function (acc) {
         acc.serverBase = base
-        saveAccount(acc)
+        saveAccount(acc, self._ssid)
       })
     },
     toggleRemember() {
@@ -782,20 +827,25 @@ export default {
         }
         return
       }
-      // 登录成功 → 保存凭据 → 复查连通性确认放行
+      // 登录成功 → 保存凭据 (按当前 WiFi 名称分别存储) → 复查连通性确认放行
       if (this.remember) {
-        saveAccount({
-          username: this.username,
-          password: this.password,
-          remember: true,
-          serverBase: this.serverBase,
-        })
+        saveAccount(
+          {
+            username: this.username,
+            password: this.password,
+            remember: true,
+            serverBase: this.serverBase,
+          },
+          this._ssid
+        )
+        log('配置', '已记住账号 (wifi=' + (this._ssid || '未知') + ')')
       } else {
-        loadAccount().then(function (acc) {
+        loadAccount(this._ssid).then(function (acc) {
           acc.username = self.username
           acc.password = ''
           acc.remember = false
-          saveAccount(acc)
+          acc.serverBase = self.serverBase
+          saveAccount(acc, self._ssid)
         })
       }
       this.verifyOnline(gen)

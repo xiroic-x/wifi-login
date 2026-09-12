@@ -132,3 +132,18 @@ export function describeErr(e) {
     return String(e)
   }
 }
+
+/*
+ * 当前连接的 WiFi 名称 (SSID)。用于按网络隔离记住的账号密码。
+ * 取不到 (模块不支持/无 WiFi) 返回空串, 调用方需容忍。
+ */
+export async function wifiSsid() {
+  try {
+    var c = client()
+    if (typeof c.wifiSsid !== 'function') return ''
+    var s = await c.wifiSsid()
+    return typeof s === 'string' ? s : ''
+  } catch (e) {
+    return ''
+  }
+}

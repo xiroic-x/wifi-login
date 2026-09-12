@@ -21,7 +21,18 @@
 - **已认证即进管理页**: 启动检测、登录成功复查、MAC 免认证 (`code=200`) 判定为已认证时,
   自动跳转设备管理页 (停留 800ms 让用户看到状态); 外部小程序调用 (`action=check|login`)
   与用户手动点「重新检测」时不自动跳转, 避免打断调用方流程或界面自己跳走。
-- **记住密码**: 文件落盘 (`$dataDir/wifi_account.json`), 密码 AES 密文存储; 支持一键下线 (`ucenter/user_offall`)
+  - **防空转**: 自动进入次数上限 2 次, 服务器连不上时不再反复来回跳; 管理页成功拉到
+    设备列表后通过 `wifiManageUsable` 事件重置计数。
+  - **管理页兜底退出**: 网络类失败 (`connect failed` / `timeout`) 连续 2 次自动退回主页,
+    并通过 `wifiManageClosed` 事件通知主页 (只在真正关闭时才触发返回重检, 管理页在前台
+    时不会误判为"已返回")。
+- **记住密码 (按 WiFi 隔离)**: 文件落盘 (`$dataDir/wifi_account.json`), 密码 AES 密文存储。
+  - **每个 WiFi 各存各的账号**: 存储结构 `{ version:2, accounts:{ "<ssid>": {...} }, ssid }`,
+    换到别的网络不会用上一个网络的账号密码; 当前 WiFi 名称由原生 `panet.wifiSsid()`
+    读取 (`iw dev <if> link` → `wpa_cli status` 兜底);
+  - **密码不显明文**: 已记住的密码只显示固定长度圆点掩码, 新输入的密码明文显示 3 秒便于核对;
+  - 取不到 WiFi 名称时回退"最近使用"槽位; v1 旧数据自动迁移;
+  - 支持一键下线 (`ucenter/user_offall`)。
 - **会话过期自动处理**: 网页认证页靠 5 秒一次的 `query_auth_stat` 心跳维持服务器侧会话,
   页面静止几分钟后 token 过期会提示"无法登入需刷新"。本应用:
   1. 每次登录前自动重新 `load_portal_conf` 刷新会话 (等价网页端刷新页面);
@@ -73,6 +84,7 @@ profiles/                     # 设备画像
 node test/aes.test.mjs        # AES 对照 Node crypto (aes-128-ecb zeropadding)
 node test/detect.test.mjs     # 跳转解析 / URL 拆解
 node test/portal.test.mjs     # 接口参数构造 + 探测并发竞速/abort 逻辑
+node test/store.test.mjs      # 账号按 WiFi(SSID) 分桶、v1 迁移、忘记密码、损坏回退
 ```
 
 端到端联调 (模拟 Panabit 服务器, 已支持设备列表/单机下线):

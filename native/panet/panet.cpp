@@ -372,6 +372,75 @@ static long fileSizeOf(const std::string &path)
     return size;
 }
 
+// 执行 shell 命令并捕获 stdout (失败返回空串); 用于读取 wpa_cli/iw 输出
+static std::string runCmd(const std::string &cmd)
+{
+    std::string out;
+    FILE *p = popen(cmd.c_str(), "r");
+    if (!p) return out;
+    char buf[512];
+    size_t n;
+    // 输出有界 (最多 8KB), 避免异常情况下无限读
+    while ((n = fread(buf, 1, sizeof(buf), p)) > 0 && out.size() < 8192) out.append(buf, n);
+    pclose(p);
+    return out;
+}
+
+// 逐行找以 prefix 开头的行, 返回其后的值 (去掉前导空白与尾部 CR/LF)
+static std::string grepSsid(const std::string &text, const std::string &prefix)
+{
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t eol = text.find('\n', pos);
+        std::string line = text.substr(pos, eol == std::string::npos ? std::string::npos : eol - pos);
+        pos = (eol == std::string::npos) ? text.size() : eol + 1;
+        // 允许行首有空白 (wpa_cli 输出为 "ssid=xxx", iw 输出为 "\tSSID: xxx")
+        size_t s = line.find_first_not_of(" \t");
+        if (s == std::string::npos) continue;
+        std::string trimmed = line.substr(s);
+        if (trimmed.size() <= prefix.size()) continue;
+        if (trimmed.compare(0, prefix.size(), prefix) != 0) continue;
+        std::string val = trimmed.substr(prefix.size());
+        size_t vs = val.find_first_not_of(" \t");
+        if (vs != std::string::npos) val = val.substr(vs);
+        while (!val.empty() && (val[val.size() - 1] == '\r' || val[val.size() - 1] == '\n' || val[val.size() - 1] == ' '))
+            val.erase(val.size() - 1);
+        return val;
+    }
+    return std::string();
+}
+
+// 从 /proc/net/wireless 解析无线接口名; 取不到默认 wlan0
+static std::string wirelessIface()
+{
+    FILE *f = fopen("/proc/net/wireless", "rb");
+    if (!f) return "wlan0";
+    std::string text;
+    char buf[1024];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, n);
+    fclose(f);
+
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t eol = text.find('\n', pos);
+        std::string line = text.substr(pos, eol == std::string::npos ? std::string::npos : eol - pos);
+        pos = (eol == std::string::npos) ? text.size() : eol + 1;
+        size_t colon = line.find(':');
+        if (colon == std::string::npos) continue;
+        std::string name = line.substr(0, colon);
+        size_t s = name.find_first_not_of(" \t");
+        if (s == std::string::npos) continue;
+        size_t e = name.find_last_not_of(" \t");
+        name = name.substr(s, e - s + 1);
+        // 跳过表头行 (Inter-| sta- ...)
+        if (name.empty() || name.find('-') != std::string::npos) continue;
+        if (name == "face") continue;
+        return name;
+    }
+    return "wlan0";
+}
+
 class Panet : public JQPublishObject {
 public:
     // request(url, method, timeoutSec) -> Promise<{statusCode, headers[], body(b64)}>
@@ -489,6 +558,29 @@ public:
             info.postError("unknown panet error");
         }
     }
+
+    // wifiSsid() -> Promise<string>  (当前连接的 WiFi 名称; 取不到返回空串)
+    // 固件未暴露 SSID 查询 JSAPI, 这里按可靠性依次尝试:
+    //   1) iw dev <if> link   (首选: 直接读内核 nl80211, 不依赖 supplicant socket)
+    //   2) wpa_cli -i <if> status
+    // 接口名从 /proc/net/wireless 解析, 取不到则默认 wlan0。
+    void wifiSsid(JQAsyncInfo &info)
+    {
+        try {
+            std::string ifc = wirelessIface();
+            std::string ssid;
+
+            ssid = grepSsid(runCmd("iw dev " + ifc + " link 2>/dev/null"), "SSID:");
+            if (ssid.empty())
+                ssid = grepSsid(runCmd("wpa_cli -i " + ifc + " status 2>/dev/null"), "ssid=");
+
+            info.post(ssid);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
 };
 
 static JSValue createPanet(JQModuleEnv *env)
@@ -502,6 +594,7 @@ static JSValue createPanet(JQModuleEnv *env)
     tpl->SetProtoMethodPromise("appendFile", &Panet::appendFile);
     tpl->SetProtoMethodPromise("mkdirs", &Panet::mkdirs);
     tpl->SetProtoMethodPromise("readFile", &Panet::readFile);
+    tpl->SetProtoMethodPromise("wifiSsid", &Panet::wifiSsid);
     return tpl->CallConstructor();
 }
 
