@@ -660,8 +660,8 @@ export default {
         if (gen !== self._gen) return
         if (det.status === 'aborted') return
         self.checking = false
-        self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe
-        log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
+        self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe + (det.confirm ? ' + 复核:' + det.confirm : '')
+        log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.confirm ? ' confirm=' + det.confirm : '') + (det.freeCount ? ' freeCount=' + det.freeCount : '') + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
         self.writeStatus(det)
         if (self._checkCallback) {
           // 外部检测接口: 回传结果 JSON 给调用方 ($falcon.on(回调名) 接收)

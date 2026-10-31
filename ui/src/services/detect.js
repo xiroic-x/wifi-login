@@ -4,11 +4,16 @@
  *   - 小米:   http://connect.rom.miui.com/generate_204  (正常返回 204 空包体)
  *   - vivo:   http://wifi.vivo.com.cn/generate_204
  *   - 华为:   http://connectivitycheck.platform.hicloud.com/generate_204
- * 判定逻辑 (全部探测源并发竞速, 首个确定结果即返回, 不再顺序等待):
- *   - 302 + Location                        -> portal (直接拿到跳转页面)
- *   - 204 空包体                            -> free   (无需登入)
- *   - 非空包体 (被劫持/被改写, 且无跳转URL) -> portal
- *   - 全部请求失败                          -> offline
+ * 判定逻辑 (两阶段, 全部探测源并发):
+ *   阶段一 并发探测源:
+ *     - 3xx + Location                      -> portal (直接拿到跳转页面)
+ *     - 其它 3xx / 非 204 空包体 / 无状态码  -> portal 或 error (被改写即认证证据)
+ *     - 204 空包体                          -> free 证据 (记一笔, 不等于结论!)
+ *     - 任何门户证据优先于 free 证据 (不再"首个结果即定", 判定不被时序左右)
+ *   阶段二 独立复核 (探测源端点常被网关免认证放行, 通了不等于能上网):
+ *     - 用非探测源站点复核通用连通性, 通过才报 free (并记录 confirm=复核站点)
+ *     - 复核被拦截 -> portal; 复核失败 -> offline
+ *       (宁可报"网络不通", 也绝不误报"无需登入")
  * 被劫持时从响应内容里解析跳转页面 URL (Panabit 302 Location 透传 /
  * meta refresh / location.href / 带 wlanuserip、paip 参数的链接),
  * 得到 portal 服务器 IP:PORT 与认证参数。
@@ -32,6 +37,19 @@ var PROBES = [
   { name: 'vivo', url: 'http://wifi.vivo.com.cn/generate_204' },
   { name: '华为', url: 'http://connectivitycheck.platform.hicloud.com/generate_204' },
 ]
+/*
+ * 独立复核站点: 刻意【不用】上面三个连网检测端点 —— 探测源端点常被网关免认证放行
+ * (探测源通、通用网络不通), 所以 204 只能算"证据", 必须再用普通站点复核才敢说"无需登入"。
+ * 任一复核成功即认为通用网络可达; 命中跳转/门户特征则判 portal。
+ */
+var CONFIRMS = [
+  { name: '百度', url: 'http://www.baidu.com/' },
+  { name: '腾讯', url: 'http://www.qq.com/' },
+]
+
+/* 判定 free 所需的最小独立证据数: 单源 204 不足以证明"整个网络可直连" */
+var FREE_QUORUM = 2
+
 var TIMEOUT = 3.5 // 单源超时(秒); 全失败判 offline 的最坏耗时即此值
 var GUARD_EXTRA_MS = 1200 // 全局兜底宽限: 单源超时后仍未返回则强制判决
 var ABORT_POLL_MS = 250 // abort 轮询间隔
@@ -58,64 +76,208 @@ export async function checkPortal(opts) {
     return !!(signal && signal.aborted)
   }
 
-  var settled = false
-  var pending = PROBES.length
   var errors = [] // 各源失败原因, 汇总进 offline 结果便于日志定位
+  var freeProbes = [] // 给出 204 证据的探测源
+  var portal = null // 任意探测源发现的拦截证据 (优先于 free)
+  var settled = false
+  var confPromise = null
+  var confOk = false
+  var startConfirm = null // 在执行器内定义 (需要访问 finish)
 
-  var result = await new Promise(function (resolve) {
+  /* 阶段一: 并发探测源; 出现门户证据立即短路, 否则等全部源出结论 */
+  await new Promise(function (resolve) {
+    var pending = PROBES.length
     var guard = null
     var abortWatch = null
-    var finish = function (r) {
+    var finish = function () {
       if (settled) return
       settled = true
       if (guard) clearTimeout(guard)
       if (abortWatch) clearInterval(abortWatch)
-      resolve(r)
+      resolve()
     }
-    var offlineNow = function () {
-      var off = offlineResult()
-      off.error = errors.length ? errors.join('; ') : '探测超时无响应'
-      finish(off)
+    var settleOne = function () {
+      pending--
+      if (pending <= 0) finish()
     }
-    /* 全局兜底: 任一探测源请求挂起 (原生层不返回) 时, 到点强制判决 */
-    guard = setTimeout(function () {
-      if (aborted()) return finish({ status: 'aborted' })
-      offlineNow()
-    }, timeoutSec * 1000 + GUARD_EXTRA_MS)
+    /* 全局兜底: 请求挂起 (原生层不返回) 时到点强制进入判决 */
+    guard = setTimeout(finish, timeoutSec * 1000 + GUARD_EXTRA_MS)
     /* abort 轮询: 页面切走/重新检测时立即结束, 不等挂起的请求 */
     abortWatch = setInterval(function () {
-      if (aborted()) finish({ status: 'aborted' })
+      if (aborted()) finish()
     }, ABORT_POLL_MS)
 
-    /* 所有探测源并发发起; error 不判决, 等其它源或全部失败 */
+    /* 复核与探测并行: 出现 204 证据就立刻发起复核; 证据足够且复核通过即可提前收尾,
+     * 不必干等挂起的探测源 (保留原来的竞速耗时特性) */
+    startConfirm = function () {
+      if (!confPromise) {
+        confPromise = withTimeout(confirmConnectivity(timeoutSec), timeoutSec * 1000 + 800, {
+          probe: CONFIRMS[0].name,
+          ok: false,
+          error: '复核超时',
+        })
+        confPromise.then(function (c0) {
+          confOk = !!(c0 && c0.ok)
+          if (confOk && freeProbes.length >= FREE_QUORUM) finish()
+        })
+      }
+      return confPromise
+    }
+
     for (var i = 0; i < PROBES.length; i++) {
       ;(function (probe) {
-        request({ url: probe.url, timeout: timeoutSec }).then(function (r) {
-          if (aborted()) return finish({ status: 'aborted' })
-          var c = classify(r)
-          if (c.kind === 'redirect') return finish(portalResult(probe.name, c.url, r))
-          if (c.kind === 'empty') return finish(freeResult(probe.name))
-          if (c.kind === 'content') return finish(portalResult(probe.name, extractRedirect(r.text), r))
-          /* error: 记录后继续等其它源 */
-          errors.push(probe.name + ': ' + (r.error || '无响应'))
-          pending--
-          if (pending === 0) offlineNow()
-        })
+        request({ url: probe.url, timeout: timeoutSec }).then(
+          function (r) {
+            if (settled) return
+            var c = classify(r)
+            if (c.kind === 'portal') {
+              /* 门户证据优先: 立刻返回; free 证据不能推翻它
+               * (旧实现"首个结果即定", 判定常被响应时序左右) */
+              if (!portal) portal = { probe: probe.name, url: c.url, resp: r }
+              return finish()
+            }
+            if (c.kind === 'free') {
+              freeProbes.push(probe.name)
+              /* 有 204 证据即并行发起复核; 证据足够且复核通过就提前收尾 */
+              startConfirm()
+              if (confOk && freeProbes.length >= FREE_QUORUM) return finish()
+            } else {
+              errors.push(probe.name + ': ' + (c.reason || '无响应'))
+            }
+            settleOne()
+          },
+          function (e) {
+            if (settled) return
+            errors.push(probe.name + ': ' + describe(e))
+            settleOne()
+          }
+        )
       })(PROBES[i])
     }
   })
 
-  return result
+  if (aborted()) return { status: 'aborted' }
+  if (portal) return portalResult(portal.probe, portal.url, portal.resp)
+
+  /* 没有任何 204 证据: 网络不可用 */
+  if (freeProbes.length === 0) {
+    var off = offlineResult()
+    off.error = errors.length ? errors.join('; ') : '探测超时无响应'
+    return off
+  }
+
+  /* 阶段二: 非探测源复核 —— 探测源可能只是被网关放行 */
+  var conf = await startConfirm()
+  if (aborted()) return { status: 'aborted' }
+  if (conf.portal) return portalResult(conf.probe, conf.url, conf.resp)
+  if (conf.ok) {
+    var fr = freeResult(freeProbes.join('/'))
+    fr.freeCount = freeProbes.length
+    fr.confirm = conf.probe
+    return fr
+  }
+
+  /* 探测源通、通用网络不通: 旧实现会误报"无需登入", 这里如实报不通 */
+  var off2 = offlineResult()
+  off2.freeCount = freeProbes.length
+  off2.confirm = conf.probe
+  off2.error = '连通性复核未通过 (' + conf.probe + ': ' + (conf.error || '无响应') + ')'
+  return off2
 }
 
-/* 单个响应分类: redirect(302+Location) / empty(204) / content / error */
+/*
+ * 单个响应分类:
+ *   3xx + Location          -> portal (直接拿到跳转页面)
+ *   其它 3xx                -> portal (被拦截但没给地址, 交由上层手选服务器)
+ *   204 + 空包体            -> free   (真正的"无需登入"证据)
+ *   无有效状态码            -> error  (不计入结论)
+ *   其余(200 空包体/非空包体) -> portal (探测端点正常只会给 204 空包体, 其它形态都是被改写)
+ */
 function classify(r) {
-  if (!r.ok) return { kind: 'error' }
-  if (r.statusCode >= 300 && r.statusCode < 400 && r.headers && r.headers.location) {
-    return { kind: 'redirect', url: trimUrl(r.headers.location) }
+  if (!r || !r.ok) return { kind: 'error', reason: (r && r.error) || '请求失败' }
+  var code = typeof r.statusCode === 'number' ? r.statusCode : 0
+  if (code <= 0) return { kind: 'error', reason: '响应无有效状态码' }
+  var hasBody = !!(r.body && r.body.length > 0)
+  if (code >= 300 && code < 400) {
+    var loc = r.headers && r.headers.location ? trimUrl(r.headers.location) : ''
+    return { kind: 'portal', url: loc }
   }
-  if (r.body.length === 0) return { kind: 'empty' }
-  return { kind: 'content' }
+  if (code === 204) {
+    return hasBody ? { kind: 'portal', url: extractRedirect(r.text) } : { kind: 'free' }
+  }
+  if (!hasBody) return { kind: 'portal', url: '' }
+  return { kind: 'portal', url: extractRedirect(r.text) }
+}
+
+/*
+ * 独立复核: 请求非探测源站点。
+ * 任何有效 HTTP 状态码都算"路径可达"; 被 3xx 跳转或响应体带门户特征则由上层判 portal;
+ * 请求失败算未通过 (继续试下一个复核站点, 全部失败才对外报不通)。
+ */
+async function confirmConnectivity(timeoutSec) {
+  var last = { probe: CONFIRMS[0].name, ok: false, error: '' }
+  for (var i = 0; i < CONFIRMS.length; i++) {
+    var host = CONFIRMS[i]
+    var r = await request({ url: host.url, timeout: timeoutSec })
+    if (!r.ok) {
+      last = { probe: host.name, ok: false, error: r.error || '无响应' }
+      continue
+    }
+    if (r.statusCode >= 300 && r.statusCode < 400) {
+      var loc = r.headers && r.headers.location ? trimUrl(r.headers.location) : ''
+      return { probe: host.name, ok: false, portal: true, url: loc, resp: r }
+    }
+    if (isPortalText(r.text)) {
+      return { probe: host.name, ok: false, portal: true, url: extractRedirect(r.text), resp: r }
+    }
+    if (typeof r.statusCode === 'number' && r.statusCode > 0) return { probe: host.name, ok: true }
+    last = { probe: host.name, ok: false, error: '响应无有效状态码' }
+  }
+  return last
+}
+
+/* 给 Promise 加硬超时: 复核请求挂起时也必须给得出结论 (界面永不卡在"正在检测…") */
+function withTimeout(p, ms, fallback) {
+  return new Promise(function (resolve) {
+    var done = false
+    var timer = setTimeout(function () {
+      if (done) return
+      done = true
+      resolve(fallback)
+    }, ms)
+    p.then(
+      function (v) {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve(v)
+      },
+      function () {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve(fallback)
+      }
+    )
+  })
+}
+
+/* 响应体是否带 captive portal 特征 (被透明改写成登录页时用它判定) */
+function isPortalText(text) {
+  if (!text) return false
+  return /wlanuserip=|paip=|clientmac=|clientip=|iarmdst=|panabit|webauth/i.test(text)
+}
+
+/* 统一错误描述: request 层不 throw, 这里兜底 Promise 被 reject 的异常路径 */
+function describe(e) {
+  if (e == null) return '未知错误'
+  if (typeof e === 'string') return e
+  if (e.message) return e.message
+  try {
+    return JSON.stringify(e)
+  } catch (err) {
+    return String(e)
+  }
 }
 
 function portalResult(probe, redirectUrl, resp) {
