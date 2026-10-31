@@ -246,6 +246,8 @@ export default {
         self.remember = acc.remember
         self.ssid = self._ssid || acc.ssid || ''
         self._lastServer = acc.serverBase || ''
+        /* 服务器是否属于当前 WiFi: 换网络时不能用上一个网络的门户服务器 (见 store.loadAccount) */
+        self._serverTrusted = acc.trusted === true
         self._rememberedAdapter = acc.adapter || '' // 该 WiFi 上次成功登录用的适配器
         log('配置', 'wifi=' + (self._ssid || '(未知)') + ' 已存账号=' + (acc.username || '无'))
         self.runCheck()
@@ -327,6 +329,7 @@ export default {
         }
         log('接口', '外部调用: 登录流程 server=' + server + ' auto=' + String(o.auto || ''))
         this._lastServer = server
+        this._serverTrusted = true // 调用方显式指定的服务器
         this._lastSyncAt = Date.now()
         this.serverBase = server
         this.serverShow = server.replace('http://', '')
@@ -688,8 +691,10 @@ export default {
           self.pageState = 'free'
           self.portalPage = ''
           self.setMsg('网络直连正常，无需登入', 'info')
-          /* 已可上网: 若已知认证服务器, 直接进入设备管理 (无服务器则仅提示) */
-          if (self._lastServer) {
+          /* 已可上网: 只有本 WiFi 自己记住的认证服务器才进设备管理。
+           * 换到别的网络时不能复用上一个网络的门户服务器, 否则会弹出与当前网络无关的
+           * 已通过认证 / 设备管理 / 下线等内容。 */
+          if (self._lastServer && self._serverTrusted) {
             self.serverBase = self._lastServer
             self.serverShow = self._lastServer.replace('http://', '')
             self.canLogout = true
@@ -703,6 +708,8 @@ export default {
           } else {
             self.serverBase = ''
             self.serverShow = ''
+            self.canLogout = false
+            self._lastServer = ''
           }
           return
         }
@@ -788,7 +795,8 @@ export default {
       this.deviceIp = ipDesc.join('  ')
 
       if (!serverBase) {
-        var saved = this._lastServer || ''
+        /* 被拦截却没拿到服务器地址: 只有本网络自己的服务器才拿来兜底 */
+        var saved = this._serverTrusted ? this._lastServer || '' : ''
         if (saved) {
           serverBase = saved
         } else {
@@ -823,6 +831,7 @@ export default {
       this.serverBase = serverBase
       this.serverShow = serverBase.replace('http://', '')
       this._lastServer = serverBase
+      this._serverTrusted = true // 服务器来自本网络实时检测或调用方指定
       this.showAdapterPick = false
       this.setMsg('正在获取 ' + adapter.name + ' 配置…', 'info')
       var res = await adapter.loadConf(serverBase, p, this._adapterState)

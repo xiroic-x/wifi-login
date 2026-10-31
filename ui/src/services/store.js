@@ -6,7 +6,7 @@
  * 存储结构 (version 2):
  *   {
  *     version: 2,
- *     accounts: { "<ssid>": { username, password(密文), remember } },
+ *     accounts: { "<ssid>": { username, password(密文), remember, server } },
  *     ssid: "<最近使用的 ssid>",
  *     serverBase: "<最近使用的认证服务器>"
  *   }
@@ -47,7 +47,7 @@ function normalizeSsid(ssid) {
 }
 
 function emptySlot() {
-  return { username: '', password: '', remember: false, adapter: '' }
+  return { username: '', password: '', remember: false, adapter: '', server: '' }
 }
 
 function defaults() {
@@ -60,6 +60,7 @@ function decodeSlot(raw) {
   out.username = typeof raw.username === 'string' ? raw.username : ''
   out.remember = raw.remember === true
   out.adapter = typeof raw.adapter === 'string' ? raw.adapter : ''
+  out.server = typeof raw.server === 'string' ? raw.server : ''
   if (raw.password) {
     try {
       out.password = paAesDecode(raw.password)
@@ -105,6 +106,7 @@ function encodeSlot(slot) {
     password: slot.password ? paAesEncode(slot.password) : '',
     remember: slot.remember === true,
     adapter: slot.adapter || '',
+    server: slot.server || '',
   }
 }
 
@@ -152,15 +154,26 @@ export async function loadAccount(ssid) {
   var db = await read()
   var key = normalizeSsid(ssid)
   var slot = null
+  var exact = false // 是否精确命中当前 SSID 自己的槽位
+  var legacyFallback = false // v1 遗留槽位回退 (库里只有 '' 一个槽)
   if (key && db.accounts[key]) {
     slot = db.accounts[key]
+    exact = true
   } else if (!key && db.ssid && db.accounts[db.ssid]) {
     slot = db.accounts[db.ssid]
   } else if (key && db.accounts[''] && Object.keys(db.accounts).length === 1) {
     slot = db.accounts['']
+    legacyFallback = true // v1 用户的账号与服务器都是全局的, 迁移期沿用
   }
   var out = slot ? { username: slot.username, password: slot.password, remember: slot.remember, adapter: slot.adapter } : emptySlot()
-  out.serverBase = db.serverBase || ''
+  /* 认证服务器必须跟着 WiFi 走: 只认本 SSID 槽位里存的 server; 旧版全局 serverBase 仅在本 SSID
+   * 精确命中(或读不到 SSID 只能用最近槽位)时沿用, 否则换网络会把上一个网络的门户服务器当成
+   * 当前网络的, 于是会弹出与当前网络无关的已通过认证/设备管理/下线等内容。
+   * trusted=false 时下游一律当作本网络没有已知认证服务器。 */
+  var trusted = exact || legacyFallback || (!key && !!slot)
+  out.serverBase = trusted ? (slot && slot.server) || db.serverBase || '' : ''
+  out.exact = exact
+  out.trusted = trusted
   out.ssid = db.ssid || ''
   return out
 }
@@ -178,6 +191,7 @@ export async function saveAccount(acc, ssid) {
     password: acc.password || '',
     remember: acc.remember === true,
     adapter: acc.adapter || '',
+    server: acc.serverBase || '',
   }
   if (acc.serverBase) db.serverBase = acc.serverBase
   return write()
