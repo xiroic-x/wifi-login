@@ -159,6 +159,8 @@ export async function loadAccount(ssid) {
   if (key && db.accounts[key]) {
     slot = db.accounts[key]
     exact = true
+  } else if (!key && db.accounts['']) {
+    slot = db.accounts[''] // 当前网络读不到 SSID: 用未知网络的槽位, 而不是别的网络
   } else if (!key && db.ssid && db.accounts[db.ssid]) {
     slot = db.accounts[db.ssid]
   } else if (key && db.accounts[''] && Object.keys(db.accounts).length === 1) {
@@ -184,7 +186,9 @@ export async function loadAccount(ssid) {
  */
 export async function saveAccount(acc, ssid) {
   var db = await read()
-  var key = normalizeSsid(ssid) || db.ssid || ''
+  /* SSID 未知时写专用 '' 槽位, 绝不复用其它网络(最近使用)的槽位 —— 否则会把这次网络的账号
+   * 与认证服务器写进上一个网络, 之后换网络就会用它、弹无关内容。 */
+  var key = normalizeSsid(ssid)
   if (key) db.ssid = key
   db.accounts[key] = {
     username: acc.username || '',

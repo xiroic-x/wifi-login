@@ -410,6 +410,20 @@ static std::string grepSsid(const std::string &text, const std::string &prefix)
     return std::string();
 }
 
+// 按可靠性依次尝试多种方式读取当前连接的 SSID (任一成功即返回):
+//   1) iw dev <if> link      -> "SSID: xxx"  (直接读内核 nl80211)
+//   2) iw dev <if> info      -> "ssid xxx"   (不带冒号, 部分 iw 版本/状态下才有)
+//   3) wpa_cli -i <if> status -> "ssid=xxx"  (依赖 supplicant socket)
+static std::string trySsid(const std::string &ifc)
+{
+    std::string s = grepSsid(runCmd("iw dev " + ifc + " link 2>/dev/null"), "SSID:");
+    if (s.empty())
+        s = grepSsid(runCmd("iw dev " + ifc + " info 2>/dev/null"), "ssid ");
+    if (s.empty())
+        s = grepSsid(runCmd("wpa_cli -i " + ifc + " status 2>/dev/null"), "ssid=");
+    return s;
+}
+
 // 从 /proc/net/wireless 解析无线接口名; 取不到默认 wlan0
 static std::string wirelessIface()
 {
@@ -568,11 +582,10 @@ public:
     {
         try {
             std::string ifc = wirelessIface();
-            std::string ssid;
-
-            ssid = grepSsid(runCmd("iw dev " + ifc + " link 2>/dev/null"), "SSID:");
-            if (ssid.empty())
-                ssid = grepSsid(runCmd("wpa_cli -i " + ifc + " status 2>/dev/null"), "ssid=");
+            /* 多种方式 + wlan0 兜底: 读不到 SSID 时空串会让上层把账号写进别的网络槽位 */
+            std::string ssid = trySsid(ifc);
+            if (ssid.empty() && ifc != "wlan0")
+                ssid = trySsid("wlan0");
 
             info.post(ssid);
         } catch (const std::exception &e) {

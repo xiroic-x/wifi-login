@@ -240,6 +240,7 @@ export default {
       /* 先取当前 WiFi 名称, 再按名称读对应账号 (不同门店/网络各存各的密码) */
       wifiSsid().then(function (ssid) {
         self._ssid = ssid || ''
+        self._ssidResolved = true
         return loadAccount(self._ssid)
       }).then(function (acc) {
         self.username = acc.username
@@ -629,6 +630,21 @@ export default {
       }
     },
 
+    /*
+     * 当前 WiFi 名称: 页面启动链取过就用缓存; 外部调用(navTo action=login)会跳过那条链,
+     * 必须在保存账号前补取一次 —— SSID 未知时不能借用别的网络槽位, 否则会串网。
+     */
+    async resolveSsid() {
+      if (this._ssidResolved) return this._ssid || ''
+      this._ssidResolved = true
+      try {
+        this._ssid = (await wifiSsid()) || ''
+      } catch (e) {
+        this._ssid = ''
+      }
+      return this._ssid
+    },
+
     /* ---- 连通性测试 ---- */
     /* onDone: 可选, 检测完成后回调 (外部 check 接口用)
      * manual: true 表示用户主动触发 (点按钮), 检测出已认证时不自动跳管理页,
@@ -1003,6 +1019,7 @@ export default {
         return
       }
       // 登录成功 → 保存凭据 (按当前 WiFi 分别存储, 记住所用适配器) → 复查连通性确认放行
+      var ssidKey = await this.resolveSsid()
       if (this.remember) {
         saveAccount(
           {
@@ -1012,17 +1029,17 @@ export default {
             serverBase: this.serverBase,
             adapter: adapter.id,
           },
-          this._ssid
+          ssidKey
         )
-        log('配置', '已记住账号 (wifi=' + (this._ssid || '未知') + ' adapter=' + adapter.id + ')')
+        log('配置', '已记住账号 (wifi=' + (ssidKey || '未知') + ' adapter=' + adapter.id + ')')
       } else {
-        loadAccount(this._ssid).then(function (acc) {
+        loadAccount(ssidKey).then(function (acc) {
           acc.username = self.username
           acc.password = ''
           acc.remember = false
           acc.serverBase = self.serverBase
           acc.adapter = adapter.id
-          saveAccount(acc, self._ssid)
+          saveAccount(acc, ssidKey)
         })
       }
       this.verifyOnline(gen)
