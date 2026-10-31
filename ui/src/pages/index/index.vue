@@ -125,6 +125,7 @@ import { checkPortal } from '../../services/detect.js'
 import { all as allAdapters, byId, detectAdapter } from '../../services/portal-adapters/registry.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
 import { wifiSsid, writeStatusFile } from '../../services/net.js'
+import { confirmServerUsable } from '../../services/server-probe.js'
 import { log, initLog } from '../../services/logger.js'
 import { SystemIme } from '../../services/ime.js'
 
@@ -691,26 +692,45 @@ export default {
           self.pageState = 'free'
           self.portalPage = ''
           self.setMsg('网络直连正常，无需登入', 'info')
-          /* 已可上网: 只有本 WiFi 自己记住的认证服务器才进设备管理。
-           * 换到别的网络时不能复用上一个网络的门户服务器, 否则会弹出与当前网络无关的
-           * 已通过认证 / 设备管理 / 下线等内容。 */
-          if (self._lastServer && self._serverTrusted) {
-            self.serverBase = self._lastServer
-            self.serverShow = self._lastServer.replace('http://', '')
-            self.canLogout = true
-            /* 免认证/已认证状态进管理页同样需要适配器:
-             * 用该 WiFi 记住的 (缺省回退第一个注册的), 否则管理页会因无适配器而拒绝 */
-            if (!self.activeAdapterId) {
-              var remembered = self._rememberedAdapter ? byId(self._rememberedAdapter) : null
-              self.activeAdapterId = (remembered || self.adapters[0]).id
-            }
-            if (self._autoManage()) return
-          } else {
+          var clearServer = function () {
             self.serverBase = ''
             self.serverShow = ''
             self.canLogout = false
             self._lastServer = ''
           }
+          /* 只有本 WiFi 自己记住的认证服务器才进设备管理; 换网络时不能复用上一个网络的服务器 */
+          if (!(self._lastServer && self._serverTrusted)) {
+            clearServer()
+            return
+          }
+          /* 光"属于本 SSID"还不够: 同名 SSID 也可能是另一个网络(实测家庭网络与校园同名),
+           * 必须确认该服务器在当前网络真的可用, 否则不显示设备管理/下线, 更不自动跳进去 */
+          var savedServer = self._lastServer
+          var probeAdapter =
+            (self._rememberedAdapter && byId(self._rememberedAdapter)) || self.activeAdapter || self.adapters[0]
+          confirmServerUsable(probeAdapter, savedServer, self._adapterState)
+            .then(function (usable) {
+              if (gen !== self._gen) return
+              if (!usable) {
+                log('检测', '保存的认证服务器在当前网络不可用, 不进设备管理 server=' + savedServer)
+                clearServer()
+                return
+              }
+              self.serverBase = savedServer
+              self.serverShow = savedServer.replace('http://', '')
+              self.canLogout = true
+              /* 免认证/已认证状态进管理页同样需要适配器:
+               * 用该 WiFi 记住的 (缺省回退第一个注册的), 否则管理页会因无适配器而拒绝 */
+              if (!self.activeAdapterId) {
+                var remembered = self._rememberedAdapter ? byId(self._rememberedAdapter) : null
+                self.activeAdapterId = (remembered || self.adapters[0]).id
+              }
+              self._autoManage()
+            })
+            .catch(function (e) {
+              log('检测', '服务器可用性探测异常: ' + (e && e.message ? e.message : e))
+              clearServer()
+            })
           return
         }
         if (det.status === 'offline') {
