@@ -93,7 +93,7 @@ $falcon.navTo('falcon://8001865309000001/index', { action: 'check' })
 
 // 登录：预填凭据 + 自动提交
 $falcon.navTo('falcon://8001865309000001/index', {
-  action: 'login', server: '192.168.64.199:8080',
+  action: 'login', server: '10.0.0.10:8080',
   username: 'xxx', password: 'xxx', remember: '1', auto: '1',
 })
 

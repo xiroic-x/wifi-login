@@ -8,7 +8,7 @@
 // 打开登录界面 (指定服务器, 预填账号密码, 自动提交)
 $falcon.navTo('falcon://8001865309000001/index', {
   action: 'login',
-  server: '192.168.64.199:8080',   // 或 http://192.168.64.199:8080
+  server: '10.0.0.10:8080',   // 或 http://10.0.0.10:8080
   username: '15180484996',
   password: 'xxxx',
   remember: '1',
@@ -52,7 +52,7 @@ $falcon.navTo('falcon://8001865309000001')
 
 ```js
 $falcon.navTo('falcon://8001865309000001/management', {
-  serverBase: 'http://192.168.64.199:8080',
+  serverBase: 'http://10.0.0.10:8080',
   ip: '192.168.50.11',   // 本机在线 IP, 用于标记「本机」
   adapter: 'panabit',    // 适配器 ID (缺省无设备管理能力, 会提示后返回)
 })
