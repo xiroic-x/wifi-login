@@ -72,9 +72,18 @@ export async function wifiSsid() {
   }
 }
 
-/* 检测结果机器可读落盘 (RK: /userdisk/xiro/status.json, 供其他程序读取)。 */
+/* 检测结果机器可读落盘。
+ * 规范 R5: 业务数据只写 <appid>/data/ ($dataDir), 供其他程序读取同一路径即可;
+ * 取不到 $dataDir 时不写, 不再落到规范外目录。 */
 export async function writeStatusFile(content) {
-  await client().writeFile('/userdisk/xiro/status.json', content)
+  var dir = ''
+  try {
+    dir = globalThis.$dataDir || ''
+  } catch (e) {
+    dir = ''
+  }
+  if (!dir) return false
+  await client().writeFile(dir + '/status.json', content)
   return true
 }
 

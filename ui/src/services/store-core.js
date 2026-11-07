@@ -13,6 +13,7 @@
 import { paAesEncode, paAesDecode } from './aes.js'
 
 var SCHEMA_VERSION = 2
+var KV_KEY = 'wifi_account'
 
 export function createStore(io) {
   var _memory = null // 读写缓存
@@ -79,11 +80,75 @@ export function createStore(io) {
     }
   }
 
+  /*
+   * 规范 R9: 键值持久化优先走固件的 sharedpreferences 接口
+   * ($falcon.jsapi.storage.setItem/getItem 或 setStorage/getStorage -> data/sharedpreferences/preferences.json),
+   * 该接口不存在时才退回平台 io (RK 的文件 / 32 位的原生 KV)。
+   * 返回 { ok, value } —— ok=false 表示"这套机制不可用", 由调用方继续走后备。
+   */
+  function falconStorage() {
+    try {
+      var f = globalThis.$falcon
+      var s = f && f.jsapi && f.jsapi.storage
+      if (!s) return null
+      if (typeof s.getItem === 'function' || typeof s.getStorage === 'function') return s
+    } catch (e) {}
+    return null
+  }
+
+  function unwrapValue(v, key) {
+    if (v == null) return null
+    if (typeof v === 'string') return v
+    if (typeof v === 'object') {
+      if (typeof v.value === 'string') return v.value
+      if (v.value != null && typeof v.value !== 'object') return String(v.value)
+      if (typeof v[key] === 'string') return v[key]
+      if (v.data != null) return typeof v.data === 'string' ? v.data : null
+    }
+    return null
+  }
+
+  async function kvRead(key) {
+    var s = falconStorage()
+    if (!s) return { ok: false, value: null }
+    try {
+      if (typeof s.getItem === 'function') {
+        var r = await s.getItem({ key: key })
+        return { ok: true, value: unwrapValue(r, key) }
+      }
+      var r2 = await s.getStorage(key)
+      return { ok: true, value: unwrapValue(r2, key) }
+    } catch (e) {
+      return { ok: false, value: null }
+    }
+  }
+
+  async function kvWrite(key, text) {
+    var s = falconStorage()
+    if (!s) return false
+    try {
+      if (typeof s.setItem === 'function') {
+        await s.setItem({ key: key, value: text })
+        return true
+      }
+      await s.setStorage(key, text)
+      return true
+    } catch (e) {
+      try {
+        await s.setItem(key, text)
+        return true
+      } catch (e2) {
+        return false
+      }
+    }
+  }
+
   async function read() {
     if (_memory) return _memory
     var d = null
     try {
-      var raw = await io.read()
+      var kv = await kvRead(KV_KEY)
+      var raw = kv.ok ? kv.value : await io.read()
       if (raw) d = JSON.parse(raw)
     } catch (e) {
       d = null
@@ -98,9 +163,13 @@ export function createStore(io) {
       if (!Object.prototype.hasOwnProperty.call(_memory.accounts, k)) continue
       data.accounts[k] = encodeSlot(_memory.accounts[k])
     }
+    var text = JSON.stringify(data)
     try {
-      return await io.write(JSON.stringify(data))
-    } catch (e) {
+      if (await kvWrite(KV_KEY, text)) return true
+    } catch (e) {}
+    try {
+      return await io.write(text)
+    } catch (e2) {
       return false
     }
   }

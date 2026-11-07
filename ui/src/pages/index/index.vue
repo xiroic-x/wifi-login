@@ -505,7 +505,7 @@ export default {
       this._leftAt = Date.now()
     },
 
-    /* 检测结果机器可读输出: /userdisk/xiro/status.json, 供其他程序读取 */
+    /* 检测结果机器可读输出: <appid>/data/status.json (规范 R5), 供其他程序读取 */
     writeStatus(det) {
       try {
         var d = new Date()
