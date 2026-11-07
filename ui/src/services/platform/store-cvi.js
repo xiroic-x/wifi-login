@@ -1,33 +1,33 @@
 /*
- * 账号存储 (32 位 / 原生 KV 版)。
- * 逻辑全在 store-core.js, 本文件只提供"键值存储"这一层平台差异。
+ * 账号存储 (32 位 / 原生 JSAPI)。
  *
- * 固件暴露的模块名/方法名各代不一 (system_kv / storage, setItem / set / put),
- * 这里运行时逐个探测并容错; 全都不可用时退化为内存 (本次运行有效), 保证界面不崩。
+ * 实测依据 (X5(cv1826) 固件镜像): libjsapi_export.so 注册的模块里**没有 system_kv**,
+ * 但 /usr/lib/libfalcon.so 里有 setStorage / getStorage / removeStorage / clearStorage /
+ * setGlobalStorage / getSharedStorage —— 键值能力在 falcon 运行时。
+ * 因此本文件不再静态导入任何模块名(固件没有该模块会导致整包加载失败), 改为:
+ *   1) 共享内核 store-core 里的 $falcon.jsapi.storage 优先路径 (规范 R9, 写 data/sharedpreferences/);
+ *   2) 运行时探测全局注入的 KV 模块 (globalThis.$jsapi.system_kv / globalThis.system_kv);
+ *   3) 都没有 -> 内存, 保证界面可用。
+ * 逻辑(槽位/归一/迁移)全在 store-core.js, 本文件只提供 I/O。
  * 注意: 相对导入按【目标位置】services/store.js 书写 (CI 会用本文件覆盖它)。
  */
-import kvModule from '$jsapi/system_kv'
 import { createStore } from './store-core.js'
 
 var KV_KEY = 'wifi_account'
 var _kv = null
 var _memText = ''
 
+/* 运行时探测: 不 import, 因此模块不存在也不会影响加载 */
 function client() {
   if (_kv) return _kv
-  if (typeof kvModule === 'function') {
-    try {
-      _kv = new kvModule()
-    } catch (e) {
-      _kv = kvModule
-    }
-  } else {
-    _kv = kvModule || null
-  }
-  return _kv
+  try {
+    var j = globalThis.$jsapi
+    if (j && j.system_kv) _kv = j.system_kv
+    else if (globalThis.system_kv) _kv = globalThis.system_kv
+  } catch (e) {}
+  return _kv || null
 }
 
-/* 逐个试方法名; 同步/异步都兼容 */
 async function kvCall(names, key, val) {
   var c = client()
   if (!c) return { ok: false }
@@ -39,7 +39,7 @@ async function kvCall(names, key, val) {
       if (r && typeof r.then === 'function') r = await r
       return { ok: true, value: r }
     } catch (e) {
-      /* 方法名存在但签名不符: 继续试下一个 */
+      /* 方法名在但签名不符: 试下一个 */
     }
   }
   return { ok: false }
@@ -60,10 +60,6 @@ var api = createStore({
   },
   write: async function (text) {
     var r = await kvCall(['setItem', 'set', 'setValue', 'put'], KV_KEY, text)
-    if (!r.ok) {
-      _memText = text // KV 不可用: 内存兜底, 至少本次运行内可用
-      return true
-    }
     _memText = text
     return true
   },
