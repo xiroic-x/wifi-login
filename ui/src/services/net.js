@@ -6,6 +6,8 @@
  */
 import { Panet } from 'panet'
 import { createRequest, describeErr } from './net-core.js'
+import { log } from './logger.js'
+var _toldTransport = false
 
 var _panet = null
 
@@ -49,6 +51,12 @@ function b64ToBytes(b64) {
 }
 
 var request = createRequest(async function (ctx) {
+  if (!_toldTransport) {
+    _toldTransport = true
+    try {
+      if (typeof log === 'function') log('网络', '传输通道=panet (自研原生库)')
+    } catch (e) {}
+  }
   var res = await client().request(ctx.url, ctx.method, ctx.timeout)
   return {
     statusCode: res && res.statusCode,

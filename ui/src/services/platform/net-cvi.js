@@ -17,6 +17,8 @@
  * 注意: 相对导入按【目标位置】services/net.js 书写 (CI 会用本文件覆盖它)。
  */
 import { createRequest, describeErr } from './net-core.js'
+import { log } from './logger.js'
+var _toldTransport = false
 
 var _transport = null // { label, ns, fn }
 
@@ -114,6 +116,12 @@ export function describeTransport() {
 
 var request = createRequest(async function (ctx) {
   var t = pickTransport()
+  if (!_toldTransport) {
+    _toldTransport = true
+    try {
+      if (typeof log === 'function') log('网络', '传输通道=' + (t.label || '无'))
+    } catch (e) {}
+  }
   var payload = { url: ctx.url, method: ctx.method, timeout: ctx.timeout }
   if (ctx.headers) payload.headers = asObject(ctx.headers)
   if (ctx.body != null) payload.data = ctx.body
