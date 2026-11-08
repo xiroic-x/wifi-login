@@ -5,7 +5,13 @@
 
 const DEBUG = false
 
-class PageRes extends $falcon.Page {
+/* 兼容: 实测 x6pro(OS 4.3.5) 上 $falcon.Page 为空, 直接 extends 会抛
+   "cannot read property prototype of undefined", 整个页面加载失败(白屏)。
+   这里做兜底, 保证页面能挂载; 真正的框架基类存在时行为不变。 */
+const FalconPageBase =
+  typeof $falcon !== 'undefined' && $falcon && $falcon.Page ? $falcon.Page : function FalconPageStub() {}
+
+class PageRes extends FalconPageBase {
   constructor() {
     super()
     this.falconOnTokens = [] // [[token, name], ...]
