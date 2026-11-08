@@ -132,6 +132,10 @@ import { SystemIme } from '../../services/ime.js'
 /* 管理页判定"服务器不可用"后, 这段时间内不再自动进入 (用户手动重检可立即解除) */
 const MANAGE_COOLDOWN_MS = 180000
 
+/* 检测节流窗口(ms): 期间页面的自动触发不再重启检测, 顶栏按钮不受限 */
+var CHECK_THROTTLE_MS = 10000
+/* 探测只需响应头部字节: 限制响应体, 避免大页面在 JS 侧整篇解码拖住主线程 */
+var PROBE_MAX_BYTES = 4096
 export default {
   name: 'index',
   data() {
@@ -155,6 +159,8 @@ export default {
       remember: false,
       logging: false,
       checking: false,
+      /* 自动检测节流窗口(ms): 期间的 onShow 不再触发新检测 */
+      _lastCheckAt: 0,
       canLogout: false,
       showForm: false,
       showManualServer: false,
@@ -663,6 +669,17 @@ export default {
       } else if (!this._leftAt) {
         this._manual = false
       }
+      /*
+       * 防重入 + 节流: 框架会在输入法开关、前后台切换、导航返回等场景反复触发本页
+       * onShow, 若每次都重启检测, 上一次刚跑一半就被作废(bump _gen), 页面会永远停在
+       * 「正在检测…」且整机被接连不断的网络探测拖住 —— 用户感受就是"卡死, 只能等"。
+       * 自动触发一律不打断在跑的检测, 且 10 秒内不重复; 只有顶栏按钮(manual=true)强制作废重跑。
+       */
+      if (!manual) {
+        if (this.checking) return
+        if (this._lastCheckAt && Date.now() - this._lastCheckAt < CHECK_THROTTLE_MS) return
+      }
+      this._lastCheckAt = Date.now()
       var self = this
       var gen = (this._gen = (this._gen || 0) + 1)
       this.stopHeartbeat()
@@ -676,7 +693,12 @@ export default {
       this.showForm = false
       this.showManualServer = false
 
-      checkPortal({ signal: signal }).then(function (det) {
+      /* 先让出一帧: 让「正在检测…」真正上屏、框架也能处理点击, 再开始网络探测 */
+      new Promise(function (r) { setTimeout(r, 0) })
+        .then(function () {
+          return checkPortal({ signal: signal, maxBytes: PROBE_MAX_BYTES })
+        })
+        .then(function (det) {
         if (gen !== self._gen) return
         if (det.status === 'aborted') return
         self.checking = false

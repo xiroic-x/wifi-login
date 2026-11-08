@@ -51,6 +51,8 @@ function b64ToBytes(b64) {
 }
 
 var request = createRequest(async function (ctx) {
+  /* 只解前若干字节的 base64: 响应体可能很大, 全解会在 JS 主线程做 O(n) 运算 */
+  var cap = ctx.maxBytes > 0 ? Math.ceil((ctx.maxBytes * 4) / 3) + 8 : 0
   if (!_toldTransport) {
     _toldTransport = true
     try {
@@ -61,7 +63,7 @@ var request = createRequest(async function (ctx) {
   return {
     statusCode: res && res.statusCode,
     headers: res && res.headers,
-    body: b64ToBytes(res && typeof res.body === 'string' ? res.body : ''),
+    body: b64ToBytes(res && typeof res.body === 'string' ? (cap > 0 ? res.body.slice(0, cap) : res.body) : ''),
     url: res && res.url,
   }
 }, 8)

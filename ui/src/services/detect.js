@@ -72,6 +72,9 @@ export async function checkPortal(opts) {
   var o = opts || {}
   var signal = o.signal || null
   var timeoutSec = o.timeout || TIMEOUT
+  /* 探测只需要响应头部若干字节(状态码/跳转/门户标记都在前面), 限制响应体可显著减少
+   * JS 侧解码开销与内存占用, 避免大页面把主线程拖住 */
+  var maxBytes = o.maxBytes || 4096
   var aborted = function () {
     return !!(signal && signal.aborted)
   }
@@ -126,7 +129,7 @@ export async function checkPortal(opts) {
 
     for (var i = 0; i < PROBES.length; i++) {
       ;(function (probe) {
-        request({ url: probe.url, timeout: timeoutSec }).then(
+        request({ url: probe.url, timeout: timeoutSec, maxBytes: maxBytes }).then(
           function (r) {
             if (settled) return
             var c = classify(r)

@@ -150,7 +150,7 @@ function latin1(bytes) {
  * 部分固件的 http 模块会自动 follow redirect, 此时最终 URL 与请求 URL 不同,
  * 只要它落在别的 host 上就等价于一次门户跳转 —— 合成 location 供上层识别。
  */
-export function normalizeRaw(raw, requestedUrl) {
+export function normalizeRaw(raw, requestedUrl, maxBytes) {
   var r = raw
   /* 常见包装: { data: {...} } / { result: {...} } */
   if (r && typeof r === 'object' && r.status == null && r.statusCode == null && r.code == null) {
@@ -164,6 +164,8 @@ export function normalizeRaw(raw, requestedUrl) {
   var headers = normalizeHeaders(r && typeof r === 'object' ? r.headers || r.header : null)
   var rawBody = r && typeof r === 'object' ? (r.body != null ? r.body : r.data) : r
   var bytes = bytesOf(rawBody)
+  /* 只要前 maxBytes 字节: 检测/门户识别都只看头部, 省掉整篇解码 */
+  if (maxBytes > 0 && bytes.length > maxBytes) bytes = bytes.subarray(0, maxBytes)
   var finalUrl = ''
   if (r && typeof r === 'object') finalUrl = String(r.url || r.finalUrl || r.responseURL || '')
   if (!headers.location && finalUrl && requestedUrl && finalUrl !== requestedUrl) {
@@ -195,7 +197,7 @@ export function createRequest(transport, defaultTimeout) {
     var raw
     try {
       raw = await raceTimeout(
-        transport({ url: url, method: method, timeout: timeout, headers: opts.headers, body: opts.body }),
+        transport({ url: url, method: method, timeout: timeout, headers: opts.headers, body: opts.body, maxBytes: opts.maxBytes }),
         timeout * 1000 + 500
       )
     } catch (e) {
@@ -210,7 +212,7 @@ export function createRequest(transport, defaultTimeout) {
         finalUrl: '',
       }
     }
-    return normalizeRaw(raw, url)
+    return normalizeRaw(raw, url, opts.maxBytes)
   }
 }
 
