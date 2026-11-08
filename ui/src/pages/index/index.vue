@@ -133,7 +133,7 @@ import { SystemIme } from '../../services/ime.js'
 const MANAGE_COOLDOWN_MS = 180000
 
 /* 检测节流窗口(ms): 期间页面的自动触发不再重启检测, 顶栏按钮不受限 */
-var CHECK_THROTTLE_MS = 10000
+var CHECK_THROTTLE_MS = 30000
 /* 探测只需响应头部字节: 限制响应体, 避免大页面在 JS 侧整篇解码拖住主线程 */
 var PROBE_MAX_BYTES = 4096
 export default {
@@ -198,13 +198,13 @@ export default {
         if (this._leftAt) {
           this._leftAt = 0
           this._enteredManageAt = 0
-          this.runCheck()
+          this.runCheck(null, false, '返回管理页')
           return
         }
         // 从后台回来: 认证会话可能已过期, 停留超过 90 秒未同步则自动重新检测
         var stale = !this._lastSyncAt || Date.now() - this._lastSyncAt > 90000
         if ((this.pageState === 'portal' || this.pageState === 'manual') && stale) {
-          this.runCheck()
+          this.runCheck(null, false, '后台回来')
         }
         return
       }
@@ -325,7 +325,7 @@ export default {
         var cb = String(o.callback || 'wifiCheckResult')
         log('接口', '外部调用: 检测网络, 回调事件=' + cb)
         this._checkCallback = cb
-        this.runCheck()
+        this.runCheck(null, false, '外部调用 check')
         return true
       }
       var server = this.normalizeServer(o.server)
@@ -655,7 +655,7 @@ export default {
     /* onDone: 可选, 检测完成后回调 (外部 check 接口用)
      * manual: true 表示用户主动触发 (点按钮), 检测出已认证时不自动跳管理页,
      *         只在当前页给出"设备管理"按钮, 避免界面自己跳走 */
-    runCheck(onDone, manual) {
+    runCheck(onDone, manual, reason) {
       if (typeof onDone !== 'function') onDone = null
       /* 只有用户主动点按钮的重检才保留 _manual; 自动/外部触发的重检清掉该标记,
          使"从后台返回发现已认证"仍能自动进入管理页 */
@@ -676,9 +676,16 @@ export default {
        * 自动触发一律不打断在跑的检测, 且 10 秒内不重复; 只有顶栏按钮(manual=true)强制作废重跑。
        */
       if (!manual) {
-        if (this.checking) return
-        if (this._lastCheckAt && Date.now() - this._lastCheckAt < CHECK_THROTTLE_MS) return
+        if (this.checking) {
+          if (!this._skipLogged) { this._skipLogged = true; log('检测', '已在检测中, 忽略本次自动触发 by=' + (reason || '-')) }
+          return
+        }
+        if (this._lastCheckAt && Date.now() - this._lastCheckAt < CHECK_THROTTLE_MS) {
+          if (!this._skipLogged) { this._skipLogged = true; log('检测', '节流中(30s内), 忽略本次自动触发 by=' + (reason || '-')) }
+          return
+        }
       }
+      this._skipLogged = false
       this._lastCheckAt = Date.now()
       var self = this
       var gen = (this._gen = (this._gen || 0) + 1)
@@ -703,7 +710,7 @@ export default {
         if (det.status === 'aborted') return
         self.checking = false
         self.probeName = det.status === 'offline' ? '全部探测源无响应' : det.probe + (det.confirm ? ' + 复核:' + det.confirm : '')
-        log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.confirm ? ' confirm=' + det.confirm : '') + (det.freeCount ? ' freeCount=' + det.freeCount : '') + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : ''))
+        log('检测', 'status=' + det.status + ' probe=' + det.probe + (det.confirm ? ' confirm=' + det.confirm : '') + (det.freeCount ? ' freeCount=' + det.freeCount : '') + (det.portalPage ? ' page=' + det.portalPage : '') + (det.error ? ' err=' + det.error : '') + (reason ? ' by=' + reason : ''))
         self.writeStatus(det)
         if (self._checkCallback) {
           // 外部检测接口: 回传结果 JSON 给调用方 ($falcon.on(回调名) 接收)
