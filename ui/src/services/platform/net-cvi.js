@@ -16,7 +16,7 @@
  * 响应归一化统一交给 net-core。
  * 注意: 相对导入按【目标位置】services/net.js 书写 (CI 会用本文件覆盖它)。
  */
-import { createRequest, describeErr } from './net-core.js'
+import { createRequest, describeErr, envSsid } from './net-core.js'
 import { log } from './logger.js'
 var _toldTransport = false
 
@@ -142,6 +142,9 @@ export { request, describeErr }
  * 因此不再固定返回空串: 逐个试常见取法, 取不到才返回空 (上层按"网络名未知"处理)。
  */
 export async function wifiSsid() {
+  /* 固件 env 是最可靠的来源, 两个平台通用 */
+  var fromEnv = envSsid()
+  if (fromEnv) return fromEnv
   var j = jsapi()
   var nsList = []
   if (j && j.wifi) nsList.push(j.wifi)

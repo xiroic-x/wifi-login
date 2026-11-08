@@ -5,7 +5,7 @@
  *   request(url, method, timeoutSec) -> Promise<{statusCode, headers:["Name: value"...], body:base64}>
  */
 import { Panet } from 'panet'
-import { createRequest, describeErr } from './net-core.js'
+import { createRequest, describeErr, envSsid } from './net-core.js'
 import { log } from './logger.js'
 var _toldTransport = false
 
@@ -70,6 +70,9 @@ export { request, describeErr }
 
 /* 当前连接的 WiFi 名称 (SSID)。取不到返回空串, 调用方需容忍。 */
 export async function wifiSsid() {
+  /* 固件 env 里就有当前网络名(实测真机 env.custom.wifiSsid), 最先用 */
+  var fromEnv = envSsid()
+  if (fromEnv) return fromEnv
   try {
     var c = client()
     if (typeof c.wifiSsid !== 'function') return ''

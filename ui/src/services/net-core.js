@@ -8,6 +8,20 @@
  *   { ok, statusCode, headerLines, headers(小写键 map), body: Uint8Array, text, error, finalUrl }
  */
 
+/*
+ * 当前 WiFi 名: 固件运行环境里就有 (实测 env.custom.wifiSsid = 真机 SSID)。
+ * 这是最可靠的来源, 两个平台都能取到, 拿不到再退各平台自己的手段。
+ */
+export function envSsid() {
+  try {
+    var f = globalThis.$falcon
+    var c = f && f.env && f.env.custom
+    var s = c && (c.wifiSsid || c.wifiSsidName || c.ssid)
+    if (typeof s === 'string' && s && s !== 'unknown') return s
+  } catch (e) {}
+  return ''
+}
+
 export function describeErr(e) {
   if (e == null) return '未知错误'
   if (typeof e === 'string') return e
