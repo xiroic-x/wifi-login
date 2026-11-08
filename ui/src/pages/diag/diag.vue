@@ -61,6 +61,7 @@ import { collectReport, reportLines } from '../../services/probe.js'
 import { readState, writeState, loadAccount, migrateLegacy } from '../../services/store.js'
 import { request } from '../../services/net.js'
 import { APP_VERSION } from '../../services/version.js'
+import { log } from '../../services/logger.js'
 
 export default {
   name: 'diag',
@@ -151,6 +152,7 @@ export default {
           { k: '旧数据迁移', v: sh.migrate },
         ]
         self.lines = reportLines(rep)
+        log('检测页', self.lines.join(' | ').slice(0, 700))
         self.tsText = self._fmtTs(rep.ts)
       } catch (e) {
         self.lines = ['探测异常: ' + (e && e.message ? e.message : e)]

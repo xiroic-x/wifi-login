@@ -119,6 +119,44 @@ export class BasePage extends PageRes {
   }
 
 
+  onShow() {
+    super.onShow()
+    if (this.$root && this.$root.onShow) {
+      this.$root.onShow()
+    }
+    /* 首个进入的页面触发一次启动检查(迁移/更新提示) */
+    startupCheck()
+  }
+
+  onHide() {
+    super.onHide()
+    if (this.$root && this.$root.onHide) {
+      this.$root.onHide()
+    }
+  }
+
+  onUnload() {
+    try {
+      super.onUnload()
+      if (this.$root && this.$root.onUnload) {
+        this.$root.onUnload()
+      }
+    } finally {
+      this.release()
+    }
+  }
+
+  beforeVueInstantiate(Vue) {
+    try {
+      Vue.prototype.$workspace = globalThis.$workspace
+      Vue.prototype.$appid = globalThis.$appid
+    } catch (err) {
+      console.log(err)
+    }
+  }
+}
+
+/* 启动检查放类外: 类体内不能声明 var/async function */
 /*
  * 启动检查(每次启动只做一次, 由首个进入的页面触发):
  *  1) 旧数据迁移 —— 早期版本把数据写在 /userdisk/xiro/ 下, 现搬进应用数据目录;
@@ -157,41 +195,5 @@ async function startupCheck() {
     if (!last) await writeState({ lastVersion: APP_VERSION })
   } catch (e2) {
     log('启动', '启动检查异常 ' + (e2 && e2.message ? e2.message : e2))
-  }
-}
-  onShow() {
-    super.onShow()
-    if (this.$root && this.$root.onShow) {
-      this.$root.onShow()
-    }
-    /* 首个进入的页面触发一次启动检查(迁移/更新提示) */
-    startupCheck()
-  }
-
-  onHide() {
-    super.onHide()
-    if (this.$root && this.$root.onHide) {
-      this.$root.onHide()
-    }
-  }
-
-  onUnload() {
-    try {
-      super.onUnload()
-      if (this.$root && this.$root.onUnload) {
-        this.$root.onUnload()
-      }
-    } finally {
-      this.release()
-    }
-  }
-
-  beforeVueInstantiate(Vue) {
-    try {
-      Vue.prototype.$workspace = globalThis.$workspace
-      Vue.prototype.$appid = globalThis.$appid
-    } catch (err) {
-      console.log(err)
-    }
   }
 }
