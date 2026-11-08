@@ -113,7 +113,7 @@ export async function writeState(patch) {
  * 账号本体一直用同一个 KV 键(wifi_account)与同一份 schema, 数据连续性不受影响。
  */
 function fileApi() {
-  var names = [file, fs, io,
+  var names = ['file', 'fs', 'io']
   try {
     var j = globalThis.$falcon && globalThis.$falcon.jsapi
     if (!j) return null
