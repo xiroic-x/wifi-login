@@ -10,6 +10,15 @@
   },
   "props": {
     "supportCleanUp": true,
-    "cleanUpThreshold": 1
+    "cleanUpThreshold": 1,
+    "supportUnInstall": true,
+    "addDesktop": {
+      "melon_platform": true,
+      "x3s_platform": true,
+      "plum_platform": true,
+      "apollo_platform": true,
+      "coco_platform": true,
+      "almond_platform": true
+    }
   }
 }

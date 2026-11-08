@@ -1,7 +1,20 @@
 import { BasePage } from './base-page.js'
 import { log, initLog } from './services/logger.js'
 
-const DESIGN_WIDTH = 960 // 有道词典笔 melon_pro: 屏幕 960x266 (direction 270)
+/* 设计基准宽度: 仅当固件没给逻辑宽度时兜底 (有道词典笔 melon_pro 960x266) */
+const DESIGN_WIDTH = 960
+/*
+ * 逻辑宽度以【固件配置】为准: $falcon.env.custom.currentScreenWidth 就是各机型自己的值
+ * (真机实测 960; 各包 cfg.json 里 640/800/1020 等)。写死一个宽度会在其它机型上错位。
+ */
+function logicalWidth() {
+  try {
+    var c = $falcon && $falcon.env && $falcon.env.custom
+    var w = c ? parseInt(c.currentScreenWidth, 10) : 0
+    if (w > 0) return w
+  } catch (e) {}
+  return DESIGN_WIDTH
+}
 
 /* 同 base-page: 固件可能没有 $falcon.App, 兜底避免加载期抛异常。 */
 const FalconAppBase =
@@ -14,7 +27,8 @@ class App extends FalconAppBase {
 
   onLaunch(options) {
     super.onLaunch(options)
-    this.setViewPort(DESIGN_WIDTH)
+    var vw = logicalWidth()
+    this.setViewPort(vw)
     $falcon.useDefaultBasePageClass(BasePage)
     initLog()
     log('应用', 'onLaunch appid=' + (globalThis.$appid || ''))
@@ -22,7 +36,7 @@ class App extends FalconAppBase {
     try {
       var f = typeof $falcon !== 'undefined' ? $falcon : null
       var j = f && f.jsapi ? f.jsapi : null
-      log('环境', 'App=' + (f && typeof f.App) + ' Page=' + (f && typeof f.Page)
+      log('环境', 'vw=' + vw + ' theme=' + ((f && f.env && f.env.custom && f.env.custom.theme) || '-') + ' App=' + (f && typeof f.App) + ' Page=' + (f && typeof f.Page)
         + ' jsapi=' + (typeof j)
         + ' storage=' + (j && typeof j.storage)
         + ' http=' + (j && typeof j.http)
