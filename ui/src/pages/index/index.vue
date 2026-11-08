@@ -6,8 +6,8 @@
         <text class="title">WiFi 网络认证</text>
       </div>
       <div class="headbtns">
-        <div class="headbtn headbtn-sm" @click="openLog">
-          <text class="headbtn-text">日志</text>
+        <div class="headbtn headbtn-sm" @click="openDiag">
+          <text class="headbtn-text">检测</text>
         </div>
         <div class="headbtn headbtn-sm" @click="openAbout">
           <text class="headbtn-text">关于</text>
@@ -317,7 +317,7 @@ export default {
       this._launched = true
       if (action === 'log') {
         log('接口', '外部调用: 打开日志页')
-        $falcon.navTo('log', {})
+        $falcon.navTo('diag', {})
         return true
       }
       if (action === 'check') {
@@ -413,8 +413,8 @@ export default {
       this.msgType = type || 'info'
     },
 
-    openLog() {
-      $falcon.navTo('log', {})
+    openDiag() {
+      $falcon.navTo('diag', {})
     },
     openAbout() {
       $falcon.navTo('about', {})

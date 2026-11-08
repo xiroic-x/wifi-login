@@ -244,8 +244,61 @@ export function createStore(io) {
     return write()
   }
 
+  /* 清除【全部】网络槽位保存的账号(设置里"空间清理"入口会用到) */
+  async function clearAllAccounts() {
+    var db = await read()
+    var keys = []
+    for (var k in db.accounts) {
+      if (!Object.prototype.hasOwnProperty.call(db.accounts, k)) continue
+      keys.push(k)
+    }
+    db.accounts = {}
+    db.ssid = ''
+    db.serverBase = ''
+    var ok = await write()
+    return { ok: ok, cleared: keys.length }
+  }
+
+  /*
+   * 运行状态(首次打开/更新后是否已提示过迁移等)。
+   * 优先走 sharedpreferences, 其次平台提供的键化 io(readKey/writeKey),
+   * 都没有则本次运行内存态 —— 三档都不会影响账号数据。
+   */
+  var _stateMem = null
+  async function readState() {
+    if (_stateMem) return _stateMem
+    var out = {}
+    try {
+      var kv = await kvRead(KV_KEY + '_state')
+      var raw = kv.ok ? kv.value : null
+      if (!raw && io.readKey) raw = await io.readKey('state')
+      if (raw) out = JSON.parse(raw) || {}
+    } catch (e) { out = {} }
+    _stateMem = out
+    return out
+  }
+
+  async function writeState(patch) {
+    var cur = await readState()
+    for (var k in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, k)) cur[k] = patch[k]
+    }
+    _stateMem = cur
+    var text = JSON.stringify(cur)
+    try {
+      if (await kvWrite(KV_KEY + '_state', text)) return true
+    } catch (e) {}
+    if (io.writeKey) {
+      try { return await io.writeKey('state', text) } catch (e2) {}
+    }
+    return false
+  }
+
   return {
     loadAccount: loadAccount,
+    clearAllAccounts: clearAllAccounts,
+    readState: readState,
+    writeState: writeState,
     saveAccount: saveAccount,
     forgetPassword: forgetPassword,
     clearAccount: clearAccount,

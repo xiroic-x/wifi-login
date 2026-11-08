@@ -58,6 +58,16 @@ var api = createStore({
       return _memText
     }
   },
+  readKey: async function (name) {
+    var r = await kvCall(['getItem', 'get'], name)
+    if (!r.ok || r.value == null) return ''
+    return typeof r.value === 'string' ? r.value : JSON.stringify(r.value)
+  },
+  writeKey: async function (name, text) {
+    var r = await kvCall(['setItem', 'set', 'put'], name, text)
+    return !!r.ok
+  },
+
   write: async function (text) {
     var r = await kvCall(['setItem', 'set', 'setValue', 'put'], KV_KEY, text)
     _memText = text
@@ -79,5 +89,91 @@ export async function forgetPassword(ssid) {
 
 export async function clearAccount(ssid) {
   return api.clearAccount(ssid)
+}
+
+/* 清除全部网络槽位的账号(设置里"空间清理"入口用) */
+export async function clearAllAccounts() {
+  return api.clearAllAccounts()
+}
+
+export async function readState() {
+  return api.readState()
+}
+
+export async function writeState(patch) {
+  return api.writeState(patch)
+}
+
+/*
+ * 旧数据迁移:
+ * 本平台固件的 JSAPI 模块表里没有独立 file 模块, 但不同固件代次可能挂在
+ * falcon.jsapi.file / fs / io 或 system 下面 —— 这里【运行时探测】文件能力,
+ * 探到就真迁移(把 /userdisk/xiro/ 下的旧账号/状态搬进 <appid>/data/ 或 KV),
+ * 探不到就明确记录原因并返回空结果(不会误删任何东西)。
+ * 账号本体一直用同一个 KV 键(wifi_account)与同一份 schema, 数据连续性不受影响。
+ */
+function fileApi() {
+  var names = [file, fs, io,
+  try {
+    var j = globalThis.$falcon && globalThis.$falcon.jsapi
+    if (!j) return null
+    for (var i = 0; i < names.length; i++) {
+      var ns = j[names[i]]
+      if (ns && (typeof ns.readFile === 'function' || typeof ns.read === 'function')) return ns
+    }
+    if (j.system && (typeof j.system.readFile === 'function' || typeof j.system.read === 'function')) return j.system
+    if (typeof j.readFile === 'function') return j
+  } catch (e) {}
+  return null
+}
+
+async function fileRead(ns, path) {
+  try {
+    var fn = ns.readFile || ns.read
+    var r = fn.call(ns, path)
+    if (r && typeof r.then === 'function') r = await r
+    return typeof r === 'string' ? r : r ? JSON.stringify(r) : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+async function fileWrite(ns, path, text) {
+  try {
+    var fn = ns.writeFile || ns.write
+    if (typeof fn !== 'function') return false
+    var r = fn.call(ns, path, text)
+    if (r && typeof r.then === 'function') await r
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export async function migrateLegacy() {
+  var out = { moved: [], skipped: [], reason: '' }
+  var ns = fileApi()
+  if (!ns) {
+    out.reason = '该机型固件未提供文件接口, 无旧文件可迁移(账号走 KV, 键与结构未变)'
+    return out
+  }
+  var dir = ''
+  try {
+    dir = globalThis.$dataDir || ''
+  } catch (e) { dir = '' }
+  if (!dir) { out.reason = '无 $dataDir, 跳过文件迁移'; return out }
+  var pairs = [
+    ['/userdisk/xiro/wifi_account.json', dir + '/wifi_account.json', '账号'],
+    ['/userdisk/xiro/status.json', dir + '/status.json', '检测结果'],
+    ['/userdisk/xiro/wifi.log', dir + '/wifi.log.legacy', '旧日志']
+  ]
+  for (var i = 0; i < pairs.length; i++) {
+    var content = await fileRead(ns, pairs[i][0])
+    if (!content) continue
+    var exists = await fileRead(ns, pairs[i][1])
+    if (exists) { out.skipped.push(pairs[i][2]); continue }
+    if (await fileWrite(ns, pairs[i][1], content)) out.moved.push(pairs[i][2])
+  }
+  return out
 }
 

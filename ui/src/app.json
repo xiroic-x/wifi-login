@@ -2,7 +2,9 @@
   "pages": {
     "index": "pages/index/index.vue",
     "management": "pages/management/management.vue",
-    "log": "pages/log/log.vue",
+    "diag": "pages/diag/diag.vue",
+    "cleanup": "pages/cleanup/cleanup.vue",
+    "migrated": "pages/migrated/migrated.vue",
     "about": "pages/about/about.vue"
   },
   "options": {

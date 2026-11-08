@@ -1,3 +1,6 @@
+import { migrateLegacy, readState, writeState } from './services/store.js'
+import { APP_VERSION } from './services/version.js'
+import { log } from './services/logger.js'
 /*
  * 页面基类: 统一管理 $falcon.on 事件 token、setTimeout/setInterval,
  * 页面卸载时全部释放, 防止残留 timer / 订阅。
@@ -115,11 +118,54 @@ export class BasePage extends PageRes {
     }
   }
 
+
+/*
+ * 启动检查(每次启动只做一次, 由首个进入的页面触发):
+ *  1) 旧数据迁移 —— 早期版本把数据写在 /userdisk/xiro/ 下, 现搬进应用数据目录;
+ *  2) 版本更新 —— 与上次运行记录比对, 版本变了就提示一次。
+ * 迁移成功或版本变化时进入「迁移已完成 / 更新完成」页; 全新安装不做打扰。
+ */
+var _startupChecked = false
+async function startupCheck() {
+  if (_startupChecked) return
+  _startupChecked = true
+  try {
+    var moved = []
+    try {
+      var m = await migrateLegacy()
+      moved = (m && m.moved) || []
+      if (moved.length) log('迁移', '旧数据已迁移: ' + moved.join('/'))
+    } catch (e1) {
+      log('迁移', '迁移检查异常 ' + (e1 && e1.message ? e1.message : e1))
+    }
+    var st = await readState()
+    var last = st && st.lastVersion
+    if (moved.length) {
+      await writeState({ lastVersion: APP_VERSION, migratedAt: Date.now(), noticeShownAt: Date.now() })
+      if (typeof $falcon !== 'undefined' && $falcon.navTo) {
+        $falcon.navTo('migrated', { kind: 'migrate', items: moved.join(',') })
+      }
+      return
+    }
+    if (last && last !== APP_VERSION) {
+      await writeState({ lastVersion: APP_VERSION, noticeShownAt: Date.now() })
+      if (typeof $falcon !== 'undefined' && $falcon.navTo) {
+        $falcon.navTo('migrated', { kind: 'update', prev: last })
+      }
+      return
+    }
+    if (!last) await writeState({ lastVersion: APP_VERSION })
+  } catch (e2) {
+    log('启动', '启动检查异常 ' + (e2 && e2.message ? e2.message : e2))
+  }
+}
   onShow() {
     super.onShow()
     if (this.$root && this.$root.onShow) {
       this.$root.onShow()
     }
+    /* 首个进入的页面触发一次启动检查(迁移/更新提示) */
+    startupCheck()
   }
 
   onHide() {
