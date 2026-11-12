@@ -38,7 +38,7 @@ $falcon.navTo('falcon://8001865309000001')
 | username / password | 预填凭据 (密码明文传输, 仅限调用方可信场景) |
 | remember | `'1'` 记住密码 |
 | auto | `'1'` 且 server/username/password 齐全时自动提交登录 |
-| adapter | 可选, 强制指定适配器 ID (如 `panabit`); 缺省自动识别 / 用该 WiFi 记住的 / 第一个注册的 |
+| adapter | 可选, 强制指定适配器 ID (`panabit` / `h3c-imc`); 缺省自动识别 / 用该 WiFi 记住的 / 第一个注册的 |
 
 > 外部调用场景 (`action=check` / `action=login`) **不会自动跳转设备管理页**, 以免打断调用方流程;
 > 只有正常启动流程 (无参数) 检测到已认证时才自动进入管理页。

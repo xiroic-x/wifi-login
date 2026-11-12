@@ -11,9 +11,9 @@
 ADAPTER.md                    # 适配器模块开发指南 (接口契约 + 全流程)
 CHANGELOG.md                  # 更新日志 (CI 发版时按版本抽取为 Release Notes)
 SKILL.md                      # 配套 skill: 从网站分析到制作适配器全流程
-docs/                         # 详细文档 (外部调用接口 / Panabit 协议 / 本文件)
+docs/                         # 详细文档 (外部调用接口 / Panabit 与 H3C iMC 协议 / 本文件)
 native/                       # 自研原生模块 panet (固件无系统 http/storage 模块)
-  panet/panet.cpp             #   request / writeFile / appendFile / readFile / mkdirs / wifiSsid
+  panet/panet.cpp             #   request(url,method,timeout,body,headers) / 文件 / wifiSsid
   panet/CMakeLists.txt        #   aarch64 交叉编译配置
   sdk/                        #   板端 JSAPI SDK 头文件
 ui/                           # 小程序源码 (aiot-vue-cli 工程)
@@ -29,6 +29,7 @@ ui/                           # 小程序源码 (aiot-vue-cli 工程)
   src/services/portal-adapters/   # 认证适配器模块 (本体框架消费的稳定接口)
     adapter-api.js            #   适配器公共工具 (查询串序列化 / GB2312 清洗)
     panabit.js                #   Panabit 适配器 (内置默认, 亦作演示模板)
+    h3c-imc.js                #   H3C iMC Portal 适配器 (POST 表单/自定义头/Cookie/心跳保活)
     registry.js               #   注册表 + detectAdapter 自动识别 (特征评分)
   src/services/platform/      # CVI (CVITEK / RISC-V) 平台实现
     net-cvi.js                #   网络: 固件原生 $jsapi/http 模块
@@ -37,7 +38,7 @@ ui/                           # 小程序源码 (aiot-vue-cli 工程)
   src/services/aes.js         # AES-128-ECB/ZeroPadding 纯 JS 实现
   src/services/ime.js         # 系统输入法 (global.startTextEdit) 封装
   src/services/store.js       # 账号持久化 (按 WiFi/SSID 分桶)
-  src/services/logger.js      # 运行日志写 /userdisk/xiro/wifi.log
+  src/services/logger.js      # 运行日志写 $dataDir/wifi.log
   src/services/version.js     # 版本号
 profiles/                     # 设备画像 (X6PRO 真机实测结论)
 ```
@@ -53,7 +54,7 @@ GitHub Actions 云端打包 (推送 `main` 或打 `v*` 标签即触发; 打标�
    `services/net.js` / `store.js` / `logger.js` (改用固件原生 `$jsapi/http` /
    `system_kv` 模块), 移除自研 `.so` 后再打包。
 
-本地构建 (需 Node + pnpm):
+本地构建 (需 Node 16/18 + pnpm; Node ≥22 会因旧 webpack 插件报 `No such module: http_parser`):
 
 ```sh
 pnpm install -C ./ui
@@ -68,6 +69,10 @@ rm -f ui/libs/*.so
 pnpm -C ui package        # 产物为 CVI 版; 记得用 git checkout 还原三个服务文件
 ```
 
+> 本地没有 aarch64 工具链时, 包内不会有 `libs/libjsapi_panet.so` (真机上网络不可用)。
+> 想做本地 RK 冒烟包, 可先从 Release 的 `-rk.amr` 里解出 `libs/libjsapi_panet.so`
+> 放到 `ui/libs/` 再打包 (注意这份 `.so` 可能是旧版, 不含 POST body/自定义头能力)。
+
 版本号在 `ui/package.json` 与 `ui/src/services/version.js` 两处同步,
 产物名为 `<appid>.<主>_<次>_<修>.amr` (如 `8001865309000001.1_1_2.amr`),
 Release 资产按平台加 `-rk` / `-cvi` 后缀。
@@ -75,8 +80,12 @@ Release 资产按平台加 `-rk` / `-cvi` 后缀。
 ## 安装
 
 ```sh
-adb push 8001865309000001.1_1_0.amr /data/local/tmp/
-adb shell "miniapp_cli install /data/local/tmp/8001865309000001.1_1_0.amr"
+# 1.2.0 起包内原生库有更新 (POST 表单/自定义头): 覆盖安装不会更新 libs/*.so,
+# 需先卸载再安装 (会清空应用数据, 含记住的账号)
+adb shell "miniapp_cli uninstall 8001865309000001"
+
+adb push 8001865309000001.1_2_0.amr /data/local/tmp/
+adb shell "miniapp_cli install /data/local/tmp/8001865309000001.1_2_0.amr"
 adb shell "miniapp_cli start 8001865309000001"
 ```
 

@@ -2,7 +2,10 @@
  * 网络适配层 (RK / 自研 panet 原生库)。
  * 归一化与超时兜底全在 net-core.js, 本文件只做: 调用原生库 + 解 base64 响应体。
  * 固件不提供系统 http 模块, 网络能力由 libjsapi_panet.so 提供:
- *   request(url, method, timeoutSec) -> Promise<{statusCode, headers:["Name: value"...], body:base64}>
+ *   request(url, method, timeoutSec, body, headerText)
+ *     -> Promise<{statusCode, headers:["Name: value"...], body:base64}>
+ * body / headerText 可选: H3C iMC 等门户登录必须 POST 表单并带 Referer/Cookie 头。
+ * 旧版 .so 会忽略第 4/5 个参数 (只发 query 串), 适配器需保证参数在 query 中也有副本。
  */
 import { Panet } from 'panet'
 import { createRequest, describeErr, envSsid } from './net-core.js'
@@ -59,7 +62,18 @@ var request = createRequest(async function (ctx) {
       if (typeof log === 'function') log('网络', '传输通道=panet (自研原生库)')
     } catch (e) {}
   }
-  var res = await client().request(ctx.url, ctx.method, ctx.timeout)
+  /* 自定义请求头序列化为 "Name: value\r\n" 文本; 原生层负责过滤非法行 */
+  var headerText = ''
+  if (ctx.headers) {
+    for (var k in ctx.headers) {
+      if (!Object.prototype.hasOwnProperty.call(ctx.headers, k)) continue
+      var v = ctx.headers[k]
+      if (v == null) continue
+      headerText += k + ': ' + String(v).replace(/[\r\n]+/g, ' ') + '\r\n'
+    }
+  }
+  var body = ctx.body == null ? '' : String(ctx.body)
+  var res = await client().request(ctx.url, ctx.method, ctx.timeout, body, headerText)
   return {
     statusCode: res && res.statusCode,
     headers: res && res.headers,

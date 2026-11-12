@@ -28,19 +28,23 @@
  *     会话建立/刷新与失败重试由适配器自理 (协议相关), 框架只调用一次。
  *
  *   queryStat(serverBase, { params, state }) -> { ok, stat? }
- *     stat != 0 即已认证; 适配器不支持时返回 { ok: false }, 框架心跳静默。
+ *     stat != 0 即"已在别处认证" (框架会停止心跳并提示); 适配器不支持时返回 { ok: false }, 心跳静默。
+ *     需要持续保活的协议 (见 keepAlive) 应恒返回 stat: 0, 让框架保持心跳运行。
  *
  *   logout(serverBase, { params, state }) -> { ok, code?, msg? }
  *
  * 可选能力 (存在才在界面暴露对应入口):
+ *   keepAlive: true   // 登录成功/已认证后仍需框架每 30s 调 queryStat 保活 (如 H3C iMC 门户)
  *   sync(serverBase, { ip }, state)                  // 管理页进入前建会话
  *   listDevices(serverBase, { params }) -> { ok, list }   // 有才显示"设备管理"按钮
  *   offOne(serverBase, { addr }) -> { ok, code?, msg? }
  *   offAll(serverBase, { params }) -> { ok, code?, msg? }
  */
 import { panabit } from './panabit.js'
+import { h3cImc } from './h3c-imc.js'
 
-var ADAPTERS = [panabit]
+/* 注册顺序 = 认证类型选择列表的顺序; 自动识别按 match() 评分取最高, 与顺序无关 */
+var ADAPTERS = [panabit, h3cImc]
 
 /* 全部已注册适配器 (认证类型选择列表) */
 export function all() {

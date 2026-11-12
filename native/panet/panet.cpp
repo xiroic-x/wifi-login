@@ -10,6 +10,8 @@
  *  - 不跟随 302: 连通性测试需要直接看到 Location 头, 才能知道跳转页面与 Portal 服务器 IP
  *  - body 以 base64 返回: Portal 响应为 GB2312, 走 JSON 字符串会破坏字节
  *  - 支持 GET/POST(空 body 或 text body), Transfer-Encoding: chunked 解码
+ *  - POST 支持表单 body 与调用方自定义请求头 (Referer / Cookie 等),
+ *    供 H3C iMC 等需要 POST 表单 + 头的 Portal 认证使用; 旧调用方式保持兼容
  */
 
 #include <jsmodules/JSCModuleExtension.h>
@@ -324,26 +326,63 @@ static HttpResponse parseResponse(const std::string &raw)
     return r;
 }
 
-static HttpResponse httpFetch(const std::string &url, const std::string &method, int timeoutSec)
+// 校验自定义请求头行: 只接受 "Name: value", 拒绝 CR/LF 注入与超长行
+static bool validHeaderLine(const std::string &line)
+{
+    if (line.empty() || line.size() > 512) return false;
+    if (line.find('\r') != std::string::npos) return false;
+    if (line.find('\n') != std::string::npos) return false;
+    if (line.find('\0') != std::string::npos) return false;
+    size_t colon = line.find(':');
+    return colon != std::string::npos && colon > 0;
+}
+
+static HttpResponse httpFetch(const std::string &url, const std::string &method, int timeoutSec,
+                              const std::string &body, const std::string &headerText)
 {
     UrlParts u = parseUrl(url);
     TcpConn conn;
     conn.connect(u.host, u.port, timeoutSec);
 
     bool isPost = method == "POST";
+    // 解析调用方自定义头 (JS 侧以 "\r\n"/"\n" 分隔); Host/Content-Length/Connection 由本层管理
+    std::vector<std::string> extraHeaders;
+    bool hasContentType = false;
+    if (!headerText.empty()) {
+        size_t pos = 0;
+        while (pos < headerText.size() && extraHeaders.size() < 32) {
+            size_t eol = headerText.find('\n', pos);
+            std::string line = headerText.substr(pos, eol == std::string::npos ? std::string::npos : eol - pos);
+            pos = (eol == std::string::npos) ? headerText.size() : eol + 1;
+            while (!line.empty() && (line[line.size() - 1] == '\r' || line[line.size() - 1] == ' ')) line.erase(line.size() - 1);
+            size_t first = line.find_first_not_of(" \t");
+            if (first == std::string::npos) continue;
+            line = line.substr(first);
+            if (!validHeaderLine(line)) continue;
+            std::string key = toLower(line.substr(0, line.find(':')));
+            if (key == "host" || key == "content-length" || key == "connection") continue;
+            // 由本层决定: 不发压缩协商, 不接收 chunked 请求体 (响应侧照常解析 chunked)
+            if (key == "transfer-encoding" || key == "accept-encoding") continue;
+            if (key == "content-type") hasContentType = true;
+            extraHeaders.push_back(line);
+        }
+    }
+
     std::string req;
     req += (isPost ? "POST " : "GET ") + u.path + " HTTP/1.1\r\n";
     req += "Host: " + u.host + (u.port == "80" ? "" : ":" + u.port) + "\r\n";
     req += std::string("User-Agent: ") + kUserAgent + "\r\n";
     req += "Accept: */*\r\n";
+    for (size_t i = 0; i < extraHeaders.size(); i++) req += extraHeaders[i] + "\r\n";
     if (isPost) {
-        // Panabit 网页端使用 GB2312 表单编码; 本协议所有参数都在 query 中, body 恒为空
-        req += "Content-Type: application/x-www-form-urlencoded\r\n";
-        req += "Content-Length: 0\r\n";
+        // 网页端为表单编码; 参数同时放在 query 与 body 中, 旧版 .so (只发 query) 也能识别
+        if (!hasContentType) req += "Content-Type: application/x-www-form-urlencoded\r\n";
+        req += "Content-Length: " + std::to_string(body.size()) + "\r\n";
     }
     req += "Connection: close\r\n\r\n";
 
     conn.sendAll(req);
+    if (isPost && !body.empty()) conn.sendAll(body);
     std::string raw = conn.recvAll();
     if (raw.empty()) throw std::runtime_error("empty response");
     return parseResponse(raw);
@@ -457,18 +496,24 @@ static std::string wirelessIface()
 
 class Panet : public JQPublishObject {
 public:
-    // request(url, method, timeoutSec) -> Promise<{statusCode, headers[], body(b64)}>
+    // request(url, method, timeoutSec, body='', headerText='')
+    //   -> Promise<{statusCode, headers[], body(b64)}>
+    // body: POST 表单文本; headerText: 额外请求头 ("Name: value\r\n" 多行)
     void request(JQAsyncInfo &info)
     {
         try {
             if (info.Length() < 1 || !info[0].is_string())
-                throw std::runtime_error("usage: request(url, method='GET', timeoutSec=8)");
+                throw std::runtime_error("usage: request(url, method='GET', timeoutSec=8, body='', headerText='')");
             std::string url = info[0].string_value();
             std::string method = info.Length() > 1 && info[1].is_string() ? info[1].string_value() : "GET";
             int timeoutSec = info.Length() > 2 && info[2].is_number() ? info[2].int_value() : 8;
             if (timeoutSec <= 0 || timeoutSec > 60) timeoutSec = 8;
+            std::string body = info.Length() > 3 && info[3].is_string() ? info[3].string_value() : std::string();
+            std::string headerText = info.Length() > 4 && info[4].is_string() ? info[4].string_value() : std::string();
+            if (body.size() > 64 * 1024) throw std::runtime_error("request body too large");
+            if (headerText.size() > 16 * 1024) throw std::runtime_error("request headers too large");
 
-            HttpResponse r = httpFetch(url, method, timeoutSec);
+            HttpResponse r = httpFetch(url, method, timeoutSec, body, headerText);
 
             std::string headersJson;
             for (size_t i = 0; i < r.headerLines.size(); i++) {

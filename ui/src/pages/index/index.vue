@@ -192,6 +192,16 @@ export default {
         if (this.logging) return
         if (this._imeBusy) return
         if (this._imeClosedAt && Date.now() - this._imeClosedAt < 3000) return
+        /* keepAlive 适配器 (如 H3C iMC) 已认证时, 从日志/关于等页面返回不重新检测 ——
+         * 检测会判 free 并清掉服务器/停心跳, 导致服务器侧会话过期被踢;
+         * 这里直接恢复心跳, 会话是否还有效交给心跳本身判定。 */
+        if (this._keepAlive() && this.pageState === 'ok' && this.serverBase) {
+          this._leftAt = 0
+          this._enteredManageAt = 0
+          this._lastSyncAt = Date.now()
+          this.startHeartbeat()
+          return
+        }
         // 从设备管理页返回 (由管理页 trigger('wifiManageClosed') 打标):
         // 立即重新检测本机是否已下线, 不受 90 秒节流限制。
         // _leftAt 只在管理页真正关闭时才被设置, 管理页在前台时不会被误触。
@@ -448,6 +458,10 @@ export default {
       if (this._launched) return false // 外部拉起场景: 尊重调用方
       if (this._manual) return false // 用户主动点了重新检测/下线: 保持本页反馈
       if (this._destroyed) return false
+      /* 适配器没有设备管理能力 (如 H3C iMC) 时不能跳管理页:
+       * 管理页会提示"不支持设备管理"并返回 failed, 主页误报"认证服务器不可达",
+       * 且跳转时已 stopHeartbeat, 回来 keepAlive 心跳就断了。 */
+      if (!this.canManage) return false
       // 管理页没能用起来 (服务器连不上) 时不要反复来回跳, 最多自动进 2 次
       if ((this._manageTries || 0) >= 2) return false
       /* 冷却窗口: 管理页最近一次是"服务器不可达"退出时, 一段时间内不再自动进入。
@@ -802,6 +816,13 @@ export default {
       })
     },
 
+    /* 是否需要在"已认证"状态继续跑 queryStat 心跳:
+     * 部分 Portal (如 H3C iMC 网页认证) 要求客户端持续心跳, 否则服务器侧会话过期被踢下线。 */
+    _keepAlive() {
+      var a = this.activeAdapter
+      return !!(a && a.keepAlive && typeof a.queryStat === 'function')
+    },
+
     /*
      * 自动识别认证适配器:
      *   1) 识别特征评分最高者优先 (registry.detectAdapter)
@@ -851,10 +872,11 @@ export default {
     async _afterPortal(serverBase, params, det, gen) {
       var p = params || {}
       this._params = p
-      this._selfIp = p.wlanuserip || ''
+      /* 本机 IP 的入口参数各协议不同: Panabit 走 wlanuserip, H3C iMC 门户页走 userip */
+      this._selfIp = p.wlanuserip || p.userip || p.clientip || ''
       if (this._selfIp) this._lastIp = this._selfIp
       var ipDesc = []
-      if (p.wlanuserip) ipDesc.push('IP ' + p.wlanuserip)
+      if (p.wlanuserip || p.userip) ipDesc.push('IP ' + (p.wlanuserip || p.userip))
       if (p.clientmac) ipDesc.push('MAC ' + p.clientmac)
       if (p.vlan && p.vlan !== '0.0') ipDesc.push('VLAN ' + p.vlan.split('.').join('/'))
       this.deviceIp = ipDesc.join('  ')
@@ -1041,7 +1063,8 @@ export default {
       }
       if (res.code === 200) {
         // 登录流程刷新会话时发现已 MAC 免认证通过
-        this.stopHeartbeat()
+        if (this._keepAlive()) this.startHeartbeat()
+        else this.stopHeartbeat()
         this.pageState = 'ok'
         this.showForm = false
         this.setMsg('该设备已通过认证，无需登入', 'info')
@@ -1090,7 +1113,9 @@ export default {
           self.showForm = false
           self.canLogout = true
           self.probeName = det.probe
-          self.stopHeartbeat()
+          /* keepAlive 适配器 (如 H3C iMC 门户) 登录成功后仍需心跳维持会话, 不能停 */
+          if (self._keepAlive()) self.startHeartbeat()
+          else self.stopHeartbeat()
           self.setMsg('认证成功，已可上网', 'info')
           /* 登录成功后已认证: 直接进入设备管理页 (外部调用场景不跳) */
           self._autoManage()

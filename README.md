@@ -34,21 +34,30 @@
 - **认证框架 + 模块化适配器**：本体不含任何具体认证协议，协议收在
   `ui/src/services/portal-adapters/` 下的适配器模块（必选 `match` /
   `loadConf` / `login`，可选 `queryStat` / `logout` /
-  `sync` / `listDevices` / `offOne` / `offAll`）；
-  适配器提供 `listDevices` 才显示「设备管理」入口。内置 **Panabit** 适配器作为默认实现与模板。
+  `sync` / `listDevices` / `offOne` / `offAll` / `keepAlive`）；
+  适配器提供 `listDevices` 才显示「设备管理」入口，声明 `keepAlive` 才在「已认证」后继续心跳。
+  内置 **Panabit**（默认实现与模板）与 **H3C iMC Portal** 两个适配器。
 - **认证页类型自动识别**：按跳转 URL 参数 / 页面标题 / 内容 / 响应头打分取最高分；
   认不出则回退该 WiFi 上次成功的适配器，再不行让用户手选认证类型、手填服务器地址。
 - **连通性检测**：小米 / vivo / 华为三个 `generate_204` 端点并发，
   **204 只当证据**，还必须用非探测源站点复核通过才判「无需登入」（见下方专节）。
-- **账号密码登录**：Panabit `webauth/user_login`，密码 AES-128-ECB/ZeroPadding
+- **账号密码登录（Panabit）**：`webauth/user_login`，密码 AES-128-ECB/ZeroPadding
   （密钥 `Panabit@1024_key`，与网页端 `pa_aes_encode` 一致）。
-- **在线设备管理**：设备列表（设备名 / IP / MAC / 在线时长，自动标记「本机」）、
+- **账号密码登录（H3C iMC 门户）**：适配形如
+  `http://<门户>:8080/portal/?userip=…&userurl=…` 的校园/企业网页认证；
+  登录 `pws?t=li`（密码 `base64` 后再 URL 编码），响应 `base64→percent→JSON`，
+  `630xx` 业务码本地映射中文；登录成功后按 `heartBeatCyc` 发送 `doHeartBeat.jsp` 保活
+  （`keepAlive`；仅在应用主页前台运行期间发送，切后台会暂停、回前台自动恢复），
+  避免网页关闭后被踢下线；支持 `pws?t=lo` 下线。
+  iMC 门户页没有在线设备列表接口，故不提供设备管理入口。
+  协议取证与真机排障见 [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)。
+- **在线设备管理（Panabit）**：设备列表（设备名 / IP / MAC / 在线时长，自动标记「本机」）、
   单台下线（`user_offone`，`addr` 是目标设备在线 IP）、全部下线；15 秒自动刷新。
 - **记住密码按 WiFi 隔离**：`$dataDir/wifi_account.json` 结构
   `{ version:2, accounts:{ "<ssid>": {...} } }`，密码 AES 密文落盘、界面只显示圆点掩码，
   换网络不会串用上一个网络的账号。
-- **会话保活与自愈**：登录前自动 `load_portal_conf` 刷新会话、认证页 30 秒心跳、
-  会话过期类失败自动刷新重试一次（密码错 255 / 锁定 3 / 需改密 2 不重试）、
+- **会话保活与自愈**：登录前刷新门户会话、30 秒状态心跳、
+  会话过期类失败自动刷新重试一次（密码错 / 锁定 / 需改密等业务错误不重试）、
   切后台超 90 秒回前台自动重检、从管理页返回立即重检。
 - **前后台切换不冲突**：每次重检 `abort` 上一次在途探测；系统输入法面板引起的
   onHide/onShow 被识别抑制；定时器随页面统一释放。
@@ -65,10 +74,14 @@ adb shell "miniapp_cli start 8001865309000001"      # 不带 --page 才进主页
 ```
 
 装好后联网即可：检测到需要认证会自动出现登录表单，填账密点「登 录」。
-运行日志 `/userdisk/xiro/wifi.log`，机器可读状态 `/userdisk/xiro/status.json`。
+运行日志 `$dataDir/wifi.log`（实测 `$dataDir` =
+`/userdisk/miniapp/data/mini_app/pkg/8001865309000001/data`），
+机器可读状态同目录下 `status.json`。
 
+> **1.2.0 起 RK 包内含新版 `libjsapi_panet.so`**（支持 POST 表单与自定义请求头）。
 > 覆盖安装同一 appid 不会重新解包 `libs/*.so`；要让包内原生插件生效，先
 > `miniapp_cli uninstall 8001865309000001` 再 install。
+> 卸载会清空应用数据（含记住的账号），卸载前可先备份 `$dataDir`。
 
 ## 🔍 连通性判定：为什么会显示「无需登入」
 
@@ -115,14 +128,15 @@ $falcon.navTo('falcon://8001865309000001/index', { action: 'log' })
 
 | 能力 | RK 版 | CVI 版 |
 | --- | --- | --- |
-| 网络请求 | 自研 `panet` 原生库（随包打进 `.so`） | 固件原生 `$jsapi/http` |
+| 网络请求 | 自研 `panet` 原生库（随包打进 `.so`，支持 POST 表单与自定义头） | 固件原生 `$jsapi/http` |
 | 账号存储 | 文件 `$dataDir/wifi_account.json` | 原生 `$jsapi/system_kv` |
-| 运行日志 | 落盘 `/userdisk/xiro/wifi.log` | 内存缓冲（应用内可看，重启清空） |
-| 状态写盘 | `/userdisk/xiro/status.json` | 无文件模块，跳过 |
+| 运行日志 | 落盘 `$dataDir/wifi.log` | 内存缓冲（应用内可看，重启清空） |
+| 状态写盘 | `$dataDir/status.json` | 无文件模块，跳过 |
 | WiFi 名称（按网隔离） | 原生 `panet.wifiSsid()` | 无对应 API，回退「最近使用」槽位 |
 
 CVI 适配依据官方引擎库 [yocop/iot_miniapp_sdk](https://gitee.com/yocop/iot_miniapp_sdk)
 分析实现，尚无真机验证；CVI 机型请下载 `-cvi` 产物，遇问题附机型与日志提 Issue。
+CVI 的 `$jsapi/http` 是否接受 POST body/自定义头（H3C iMC 登录需要）同样**待真机验证**。
 
 ## 🛠 开发与测试
 
@@ -130,23 +144,26 @@ CVI 适配依据官方引擎库 [yocop/iot_miniapp_sdk](https://gitee.com/yocop/
   [build.yml](.github/workflows/build.yml) —— 交叉编译 `native/panet`（aarch64）→
   `pnpm -C ui package` → 产出 `-rk` / `-cvi` 两个平台的 AMR。
   本地通常没有 aarch64 工具链，包里的 `libs/libjsapi_panet.so` 由 CI 生成。
-- **本地测试（多进程并行）**：
+- **本地构建注意 Node 版本**：`aiot-vue-cli` 依赖的旧版 webpack 插件在 Node ≥ 22 上会报
+  `No such module: http_parser`，请用 **Node 16/18**（CI 用 18）执行 `pnpm -C ui build`。
+- **本地测试**（`test/` 不入库）：
 
 ```sh
 node test/run-all.mjs      # 每个 .test.mjs 各自独立进程并行跑, 汇总结果与耗时
+node test/run-h3c.mjs      # H3C iMC 适配器: 本地 mock 门户服务器 + 断言 (无需真机/真网)
 ```
 
-  覆盖纯逻辑（检测 / 适配器 / 存储 / AES）、挂起与 abort 防护，以及**设备模拟测试**：
-  `test/sim-gateway.test.mjs` 在子进程里跑 `test/mock-gateway.mjs` 模拟真实网关，
-  覆盖 正常网络 / 网关免认证放行 / 未认证全拦截 / 透明改写 / 复核不可达 五种形态。
-  `test/` 不入库。
+  `run-h3c.mjs` 会起一个本地 mock iMC 门户服务器，复刻页面/登录响应/心跳/下线，
+  校验识别评分、登录参数与 base64+URL 编码、Cookie 会话、63032 文案、已在线归一化、
+  心跳字段与诊断日志；适配器源码原样加载（只剥 import/export），不污染仓库。
+  另有一套历史用例覆盖检测 / 存储 / AES / 网关模拟（`test/sim-gateway.test.mjs`）。
 
 ```
-native/panet/       自研 panet 原生库 (request / writeFile / appendFile / readFile / mkdirs / wifiSsid)
+native/panet/       自研 panet 原生库 (request(url,method,timeout,body,headers) / 文件 / wifiSsid)
 ui/src/pages/       index / management / log / about
 ui/src/services/    detect 检测 · net 适配层 · store 存储 · portal-adapters 适配器 · platform 平台层
 profiles/           设备画像 (X6PRO 真机实测结论)
-docs/               外部接口 / Panabit 协议 / 工程说明
+docs/               外部接口 / Panabit 与 H3C iMC 协议 / 工程说明
 ```
 
 ## ❓ 常见问题
@@ -156,7 +173,7 @@ docs/               外部接口 / Panabit 协议 / 工程说明
 
 v1.1.3 起「无需登入」必须先通过非探测源复核（见
 [连通性判定](#-连通性判定为什么会显示无需登入)），复核不通会如实报「无网络连接」并附原因。
-若仍有异常：先点顶栏「重新检测」；仍不行请附 `/userdisk/xiro/wifi.log` 与
+若仍有异常：先点顶栏「重新检测」；仍不行请附 `$dataDir/wifi.log` 与
 `status.json` 提 Issue —— 日志里 `status=free` 会带 `confirm=` 与
 `freeCount=`，能直接看出复核依据。
 
@@ -168,6 +185,26 @@ v1.1.3 起「无需登入」必须先通过非探测源复核（见
 Panabit：`0` 成功、`200` 该设备免认证已通过、`255` 账号或密码错误、
 `3` 锁定（消息里带剩余秒数）、`2` 需在网页认证页改密。
 其它 `code` 会原样显示（例如 `服务器返回 code=1`），便于对照网关侧策略排查。
+
+H3C iMC 门户：`1` 成功、`200` 已在线（无需重复登录）；失败会显示本地映射的中文，
+例如 `63018` 账号不存在、`63032` 账号或密码错误、`63025` MAC 绑定失败、
+`63026` 静态 IP 绑定失败、`63027` 不在允许上网时段、`63100` 无效客户端版本。
+完整 630xx 码表见 [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)。
+
+</details>
+
+<details>
+<summary><b>H3C iMC 门户登录失败怎么排查？</b></summary>
+
+1. 先看日志 `$dataDir/wifi.log` 中的 `[H3C]` 行：`取门户页 status=… proxy=…`、
+   `登录 POST pws?t=li …`、`登录返回 … errorNumber=… code=…`——可区分「网络不通」、
+   「服务器拒绝（账密/策略）」与「响应格式不符」。
+2. 确认装的是 **1.2.0 及以后** 的 RK 包，且**卸载后重装**过（旧 `.so` 只发 query 串，
+   登录表单参数与 Referer/Cookie 头发不出去，可能被服务器拒绝；但参数已在 query，
+   部分 iMC 版本仍能通过——待真网确认）。
+3. 若 `取门户页` 都失败：检查服务器地址是否正确、是否需要手填 `IP[:端口]`；
+   门户为 **HTTPS** 的部署当前原生层不支持（目标网络是 `http://…:8080` 可用）。
+4. 若返回 `630xx`：按上面的码表处理；出现验证码/短信/动态口令属于纯 API 无法复现的情形。
 
 </details>
 
@@ -196,13 +233,14 @@ Panabit：`0` 成功、`200` 该设备免认证已通过、`255` 账号或密码
 | [SKILL.md](SKILL.md) | 配套 skill：从网站分析到做出适配器的流程要求 |
 | [docs/external-api.md](docs/external-api.md) | 外部小程序调用、设备管理页拉起、`status.json`、日志 |
 | [docs/panabit-api.md](docs/panabit-api.md) | Panabit Portal API（端点 / 参数 / 返回码 / 密码加密） |
+| [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md) | H3C iMC Portal 认证取证（端点 / 参数 / 返回码 / 心跳 / 真机实验） |
 | [docs/project.md](docs/project.md) | 工程结构、构建（CI 与本地）、版本与产物命名 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志（CI 发版时按版本抽取为 Release Notes） |
 
 ## 🤝 反馈与贡献
 
 - **提 Issue**：[Bug 反馈 / 添加认证适配器 模板](https://github.com/xiroic-x/wifi-login/issues/new/choose)
-  —— Bug 请附机型 / 版本 / 复现步骤 / 日志 `/userdisk/xiro/wifi.log` / 截图；
+  —— Bug 请附机型 / 版本 / 复现步骤 / 日志 `$dataDir/wifi.log` / 截图；
   适配新认证系统请按 [ADAPTER.md](ADAPTER.md) 提取登录页与管理页源码后提交。
 - **Pull Request** 合并前提：
   1. **不得影响 X6PRO 上已验证的现有功能** —— 这是唯一的基准机型；
