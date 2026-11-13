@@ -1,160 +1,137 @@
 /*
- * 网络适配层 (32 位 / 固件原生 JSAPI)。
+ * 网络适配层 (CVI / 固件原生 JSAPI)。
  *
- * 实测依据 (从 X5(cv1826) 固件镜像提取):
- *   - /etc/miniapp/jsapis/libjsapi_export.so 注册的模块是:
- *     wifi / volume / soundplayer / gsensor / global / brightness / bluetooth / battery / system / proxy / head
- *     —— 没有 http, 也没有 net;
- *   - /usr/lib/libfalcon.so 里有 handleHttpRequest / BaseHttpRouter / CurlDownload
- *     —— 网络能力在 falcon 运行时里, 不在 $jsapi 模块里;
- *   - 因此旧版静态导入 $jsapi/http 是"按名字猜"的模块: 固件没有它时, 整个 bundle 在
- *     加载期就会失败(不只是网络不可用)。本版改为运行时探测, 不再静态导入。
+ * 真机实测依据 (有道词典笔 CVI 机型, 固件 "IoT Miniapp" 1.6.3 / api=1):
+ *   - $falcon.jsapi 暴露的模块: **http** 与 **storage**;
+ *   - 运行时没有 `require` (调用即 ReferenceError: require is not defined),
+ *     也没有 httpbridge / $jsapi / 全局 fetch —— 手册里的动态 require 兜底在本固件不可用;
+ *   - http.request 唯一可用签名 (其余形态返回 "url is empty" 或挂起):
+ *       http.request({ url, method, timeout, headers: ['Name:value'] })
+ *     返回 Promise:
+ *       · 成功 (有响应体): { result: '<响应体字符串(已按 UTF-8 解码)>' }
+ *       · 204 空响应:     { error: 3, result: { errorMessage: 'curl curl_easy_getinfo failed, res: 0, resCode:204' } }
+ *       · 其它失败:       { error: 3, result: { errorMessage: '... resCode:xxx' } } (无 resCode 才是真失败)
+ *   - 固件不返回 HTTP 状态码/响应头, 只有响应体或 errorMessage 里的 resCode。
  *
- * 探测顺序(命中即用, 命中项可经 describeTransport() 取出写进日志, 便于取证):
- *   $falcon.jsapi.http.request -> $falcon.jsapi.net.* -> $falcon.jsapi.system.*
- *   -> $falcon.jsapi.request  -> $jsapi.http.* -> 全局 httpModule
- * 响应归一化统一交给 net-core。
+ * 本层职责: 把固件返回"翻译"成 net-core 的统一形态, 让 detect.js / 适配器零感知:
+ *   result 字符串            -> { statusCode: 200, body: result }
+ *   errorMessage 带 resCode  -> { statusCode: resCode, body: 空 }  (204 即"无需登入"的硬证据)
+ *   其它 error               -> 抛错, 由 net-core 归一为 { ok:false, error }
+ *
  * 注意: 相对导入按【目标位置】services/net.js 书写 (CI 会用本文件覆盖它)。
  */
 import { createRequest, describeErr, envSsid } from './net-core.js'
 import { log } from './logger.js'
+
 var _toldTransport = false
 
-var _transport = null // { label, ns, fn }
-
-function jsapi() {
+function httpModule() {
   try {
-    return globalThis.$falcon && globalThis.$falcon.jsapi ? globalThis.$falcon.jsapi : null
+    var j = globalThis.$falcon && globalThis.$falcon.jsapi
+    var h = j && j.http
+    return h && typeof h.request === 'function' ? h : null
   } catch (e) {
     return null
   }
 }
 
-function looksLikeResponse(r) {
-  if (r == null) return false
-  if (typeof r === 'string') return true
-  return r.status != null || r.statusCode != null || r.code != null || r.body != null || r.data != null
-}
-
-function asObject(headers) {
-  var out = {}
+/* 固件要求数组形态的 "Name:value" (对象形态会返回 url is empty / 挂起) */
+function asHeaderLines(headers) {
+  var out = []
+  if (!headers) return out
   if (Array.isArray(headers)) {
-    for (var i = 0; i < headers.length; i++) {
-      var idx = String(headers[i]).indexOf(':')
-      if (idx > 0) out[String(headers[i]).slice(0, idx).trim()] = String(headers[i]).slice(idx + 1).trim()
-    }
+    for (var i = 0; i < headers.length; i++) out.push(String(headers[i]))
     return out
   }
-  if (headers && typeof headers === 'object') return headers
+  for (var k in headers) {
+    if (!Object.prototype.hasOwnProperty.call(headers, k)) continue
+    var v = headers[k]
+    if (v == null) continue
+    out.push(k + ':' + String(v).replace(/[\r\n]+/g, ' '))
+  }
   return out
 }
 
-/* 逐个候选: 参数形态不合就换下一种, 拿到"像响应"的结果才算命中 */
-async function invoke(ns, fn, ctx, payload) {
-  var calls = []
-  if (ns && typeof ns.request === 'function') {
-    calls.push(function () { return ns.request(payload) })
-    calls.push(function () { return ns.request(ctx.url, payload) })
-  }
-  if (ns && typeof ns.get === 'function' && String(ctx.method).toUpperCase() === 'GET') {
-    calls.push(function () { return ns.get(ctx.url, payload) })
-    calls.push(function () { return ns.get(ctx.url) })
-  }
-  if (fn) {
-    calls.push(function () { return fn(payload) })
-    calls.push(function () { return fn(ctx.url, payload) })
-    calls.push(function () { return fn(ctx.url) })
-  }
-  for (var i = 0; i < calls.length; i++) {
-    try {
-      var r = await calls[i]()
-      if (looksLikeResponse(r)) return r
-    } catch (e) {
-      /* 该形态不成立, 继续 */
-    }
-  }
-  return null
+function parseResCode(msg) {
+  var m = /resCode\s*[:=]\s*(\d{3})/.exec(String(msg || ''))
+  return m ? parseInt(m[1], 10) : 0
 }
 
-function pickTransport() {
-  if (_transport) return _transport
-  var j = jsapi()
-  var list = []
-  if (j) {
-    list.push({ label: 'falcon.http', ns: j.http })
-    list.push({ label: 'falcon.net', ns: j.net })
-    list.push({ label: 'falcon.system', ns: j.system })
-    if (typeof j.request === 'function') list.push({ label: 'falcon.request', fn: j.request })
-    if (typeof j.get === 'function') list.push({ label: 'falcon.get', fn: j.get })
+/* 固件返回值 -> net-core 的 raw 形态
+ * 注意顺序: 204/失败的返回是 { error, result:{errorMessage} }, result 字段也在,
+ * 所以必须先认 error, 再认 result, 否则 204 会被误当成 200+空包体(portal)。 */
+function toRaw(r) {
+  if (r == null) throw new Error('固件 http 无返回')
+  var err = r.error
+  if (err != null && err !== 0 && err !== false) {
+    var msg = ''
+    if (r.result && typeof r.result === 'object' && r.result.errorMessage != null) msg = String(r.result.errorMessage)
+    else if (typeof r.result === 'string') msg = r.result
+    else msg = String(err)
+    var code = parseResCode(msg)
+    /* 204/其它 resCode: 固件其实完成了请求, 只是空响应体取信息失败 —— 合成状态码 */
+    if (code) return { statusCode: code, headerLines: [], body: new Uint8Array(0) }
+    throw new Error('固件 http 错误: ' + msg)
   }
-  try {
-    var legacy = globalThis.$jsapi
-    if (legacy) {
-      list.push({ label: 'jsapi.http', ns: legacy.http })
-      list.push({ label: 'jsapi.net', ns: legacy.net })
+  if (r.result != null) {
+    var body = r.result
+    if (body && typeof body === 'object') {
+      var st = body.statusCode != null ? body.statusCode : body.status != null ? body.status : 0
+      var hd = body.headers || body.header || []
+      var bd = body.body != null ? body.body : body.data
+      if (bd != null) return { statusCode: st || 200, headers: hd, body: bd }
+      if (typeof body.text === 'string') return { statusCode: st || 200, headers: hd, body: body.text }
     }
-  } catch (e) {}
-  list.push({ label: 'global.http', ns: globalThis.httpModule })
-  for (var i = 0; i < list.length; i++) {
-    var c = list[i]
-    var usable =
-      (c.ns && (typeof c.ns.request === 'function' || typeof c.ns.get === 'function')) ||
-      (typeof c.fn === 'function')
-    if (usable) {
-      _transport = { label: c.label, ns: c.ns, fn: c.fn }
-      return _transport
-    }
+    return { statusCode: 200, body: body }
   }
-  _transport = { label: '', ns: null, fn: null }
-  return _transport
-}
-
-/* 当前生效的传输通道名 (空串 = 该固件未提供可用网络能力), 供日志/状态页展示 */
-export function describeTransport() {
-  return pickTransport().label
+  throw new Error('固件 http 返回未知形态')
 }
 
 var request = createRequest(async function (ctx) {
-  var t = pickTransport()
+  var http = httpModule()
+  if (!http) throw new Error('该机型固件未提供 $falcon.jsapi.http（无法联网认证）')
   if (!_toldTransport) {
     _toldTransport = true
     try {
-      if (typeof log === 'function') log('网络', '传输通道=' + (t.label || '无'))
+      if (typeof log === 'function') log('网络', '传输通道=falcon.jsapi.http (CVI 原生 JSAPI)')
     } catch (e) {}
   }
-  var payload = { url: ctx.url, method: ctx.method, timeout: ctx.timeout }
-  if (ctx.headers) payload.headers = asObject(ctx.headers)
-  if (ctx.body != null) payload.data = ctx.body
-  var r = await invoke(t.ns, t.fn, ctx, payload)
-  if (r != null) return r
-  throw new Error(
-    t.label
-      ? '固件网络接口 ' + t.label + ' 调用失败'
-      : '该机型固件未提供可用的网络接口 (已试 falcon.http/net/system/request 与 jsapi.http)'
-  )
+  var opts = { url: ctx.url, method: String(ctx.method || 'GET').toUpperCase(), timeout: ctx.timeout }
+  var lines = asHeaderLines(ctx.headers)
+  if (lines.length) opts.headers = lines
+  if (ctx.body != null) {
+    /* 固件文档未写 POST body 字段; 同时给 body/data, 由固件取其一 (实测 GET 官方首页正常) */
+    opts.body = ctx.body
+    opts.data = ctx.body
+  }
+  var r
+  try {
+    r = await http.request(opts)
+  } catch (e) {
+    throw new Error('固件 http.request 异常: ' + describeErr(e))
+  }
+  return toRaw(r)
 }, 8)
 
 export { request, describeErr }
 
+/* 当前生效的传输通道名 (空串 = 该固件不可用), 供日志/状态页展示 */
+export function describeTransport() {
+  return httpModule() ? 'falcon.jsapi.http' : ''
+}
+
 /*
- * 当前连接的 WiFi 名称。固件 wifi 模块实测含 ssid 相关能力
- * (libjsapi_export.so: jsapi_wifi_module / ssid / getWifiPassWd / isConnected),
- * 因此不再固定返回空串: 逐个试常见取法, 取不到才返回空 (上层按"网络名未知"处理)。
+ * 当前连接的 WiFi 名称。固件 env 是最可靠的来源 (env.custom.wifiSsid);
+ * 部分固件另有 wifi 模块, 逐个试常见取法, 取不到返回空 (上层按"网络名未知"处理)。
  */
 export async function wifiSsid() {
-  /* 固件 env 是最可靠的来源, 两个平台通用 */
   var fromEnv = envSsid()
   if (fromEnv) return fromEnv
-  var j = jsapi()
-  var nsList = []
-  if (j && j.wifi) nsList.push(j.wifi)
+  var ns = null
   try {
-    if (globalThis.$jsapi && globalThis.$jsapi.wifi) nsList.push(globalThis.$jsapi.wifi)
+    ns = globalThis.$falcon && globalThis.$falcon.jsapi && globalThis.$falcon.jsapi.wifi
   } catch (e) {}
-  nsList.push(globalThis.wifiModule)
-  for (var i = 0; i < nsList.length; i++) {
-    var ns = nsList[i]
-    if (!ns) continue
+  if (ns) {
     var fns = ['getWifiInfo', 'getConnectedWifi', 'getCurrentWifi', 'getSsid', 'getConnectWifiInfo']
     for (var k = 0; k < fns.length; k++) {
       if (typeof ns[fns[k]] !== 'function') continue
@@ -192,4 +169,3 @@ function pickSsid(v) {
 export async function writeStatusFile(content) {
   return false
 }
-

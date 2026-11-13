@@ -10,8 +10,12 @@
 ## 内置适配器 (默认 / 演示模板)
 
 - `ui/src/services/portal-adapters/panabit.js` — Panabit 上网认证系统,
-  本项目唯一完成真机验证的实现, 同时作为新适配器的**演示模板**。
+  本项目首个完成真机验证的实现, 作为新适配器的**演示模板**。
   新适配器建议复制它再改协议细节。
+- `ui/src/services/portal-adapters/h3c-imc.js` — H3C iMC Portal 网页认证
+  (`/portal/?userip=…&userurl=…`), 演示了 **POST 表单 + 自定义请求头 + Cookie 会话 +
+  base64 编解码 + 返回值解码 + 心跳保活 (`keepAlive`)** 的写法; 协议取证见
+  [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)。
 - `ui/src/services/portal-adapters/adapter-api.js` — 适配器公共工具
   (查询串序列化 / GB2312 响应清洗)。
 
@@ -31,7 +35,8 @@
 
 | 成员 | 说明 |
 | --- | --- |
-| `queryStat(serverBase, { params, state })` | → `{ ok, stat? }`; stat != 0 即已认证; 不支持返回 `{ ok: false }`, 心跳静默 |
+| `queryStat(serverBase, { params, state })` | → `{ ok, stat? }`; `stat != 0` 表示"已在别处认证" (框架停止心跳); 不支持返回 `{ ok: false }`, 心跳静默 |
+| `keepAlive: true` | **需要登录后持续心跳保活**的协议声明它 (如 H3C iMC); 框架在"已认证"状态仍每 30s 调 `queryStat`, 适配器应恒回 `stat: 0`。仅在页面前台运行时有效 (`onHide` 暂停, `onShow` 恢复) |
 | `logout(serverBase, { params, state })` | 本机下线 |
 | `sync(serverBase, { ip }, state)` | 管理页进入前建会话 |
 | `listDevices(serverBase, { params })` | → `{ ok, list }`; 有才显示"设备管理"按钮 |
@@ -40,10 +45,15 @@
 
 约定:
 
-- `state` 是框架持有的对象, 适配器把 auth_type/scene_str 等写回供后续调用使用;
+- `state` 是框架持有的对象, 适配器把 auth_type/scene_str/hb 等写回供后续调用使用;
   适配器自身**不保留可变状态** (避免跨登录残留)。
 - 迟到结果由框架的 generation token 拦截, 适配器无需自己防抖。
-- 网关响应多为 GB2312, 用 `sanitize()` 只保留 ASCII 后再 `JSON.parse`。
+- 网关响应多为 GB2312, 用 `sanitize()` 只保留 ASCII 后再 `JSON.parse`;
+  若协议是 JSON/base64 且需要中文原文 (如 H3C), 适配器内自带 UTF-8 还原。
+- 发请求统一走 `request({ url, method, timeout, headers, body })`:
+  **支持 POST 表单 body 与自定义请求头** (Referer/Cookie 等), 详见
+  `ui/src/services/net.js` 与 `native/panet/panet.cpp` 的 `request()`。
+  注意设备侧 `.so` 需要 1.2.0+ (旧库会忽略 body/头, 只发 query, 适配器可做 query/body 双写兜底)。
 - 页面不出现任何协议分支; 协议语义全部收口在适配器内。
 
 ## 开发全流程
@@ -174,26 +184,40 @@ wget -p -k -nH --cut-dirs=1 -A "Mozilla/5.0" \
 ### 4. 实现适配器
 
 - 复制 `ui/src/services/portal-adapters/panabit.js` 为 `<协议>.js`, 改协议细节; 保留接口形态。
+  需要 POST 表单/自定义头/Cookie 会话的协议, 参考 `h3c-imc.js` 的写法。
 - `match()`: 给出可从 URL/标题/内容稳定区分的特征并加权评分
-  (Panabit 用跳转 URL 的 `wlanuserip=/paip=/iarmdst=` 参数 + 页面字样)。
+  (Panabit 用跳转 URL 的 `wlanuserip=/paip=/iarmdst=` 参数 + 页面字样;
+  H3C 用 `params.userip`+`userurl` 的 **key** 判断, 避免与 `wlanuserip=` 子串混淆)。
 - `loadConf()` / `login()`: 严格按上面归一化状态返回; 会话刷新 / 失败重试在
-  `login()` 内自理。
+  `login()` 内自理。**拿不准是否"已认证"时不要返回 `free`** —— 误报会隐藏登录表单,
+  免认证场景由框架的连通性检测判 `free`。
+- 需要保活的协议导出 `keepAlive: true`, 并在 `queryStat` 里恒返回 `stat: 0`。
 - 复用 `ui/src/services/portal-adapters/adapter-api.js` 的 `qs()` / `sanitize()`;
-  协议专属文案映射放适配器内。
+  协议专属文案映射放适配器内。响应是 base64/百分号编码时, 在适配器内自备解码
+  (参考 `h3c-imc.js` 的 `b64Decode`/`percentDecode`/`utf8Decode`)。
+- 诊断日志: 适配器可用 `import { log } from '../logger.js'`, 用独立标签 (如 `[H3C]`)
+  记录请求结果/返回码; 这是真机排障的唯一证据来源。
 
 ### 5. 注册
 
-在 `registry.js` 的 `ADAPTERS` 数组加一行。注册后:
+在 `registry.js` 的 `ADAPTERS` 数组加一行 (Panabit 保持在最前, 同分时先注册者胜)。
+注册后:
 
 - "认证类型"选择列表自动出现该适配器;
 - 自动识别自动把它纳入评分;
-- 提供 `listDevices` 则主页自动显示"设备管理"入口。
+- 提供 `listDevices` 则主页自动显示"设备管理"入口;
+- 提供 `keepAlive` 则"已认证"后仍保持心跳。
 
 ### 6. 验证
 
 - 本地: `node test/*.test.mjs` (文本注入桩跑纯逻辑) + `pnpm -C ui build` 编译检查。
+  `test/run-h3c.mjs` 是"本地 mock 门户服务器 + 原样加载适配器源码"的完整示例,
+  可照它给新适配器写离线用例 (校验请求参数/编码/头/返回归一化/保活)。
+- 注意本地构建用 Node 16/18 (Node ≥22 会因旧 webpack 插件报 `http_parser` 错误)。
 - 真机: 安装 → 连目标认证网络 → 看日志 `[适配器] 自动识别 <id> score=<n>` →
   登录 → 复查放行; 识别不出时走界面手选。
+- 涉及原生能力变更时 (如 POST body/自定义头), 需 CI 交叉编译新 `.so`, 且设备上
+  **先卸载再安装** (覆盖安装不会更新 `libs/*.so`)。
 - **Panabit 回归**: 新适配器不得影响 Panabit 已验证行为 (同一网络下 Panabit
   自动识别得分必须仍最高)。
 

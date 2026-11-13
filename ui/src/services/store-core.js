@@ -86,6 +86,32 @@ export function createStore(io) {
    * 该接口不存在时才退回平台 io (RK 的文件 / 32 位的原生 KV)。
    * 返回 { ok, value } —— ok=false 表示"这套机制不可用", 由调用方继续走后备。
    */
+  /* 原生 Promise 可能永远不 resolve: 每次调用限时, 超时换下一种形态 */
+  function kvTimeout(p, ms) {
+    return new Promise(function (resolve) {
+      var done = false
+      var t = setTimeout(function () {
+        if (done) return
+        done = true
+        resolve('__TIMEOUT__')
+      }, ms)
+      Promise.resolve(p).then(
+        function (v) {
+          if (done) return
+          done = true
+          clearTimeout(t)
+          resolve(v)
+        },
+        function (e) {
+          if (done) return
+          done = true
+          clearTimeout(t)
+          resolve({ __error__: String((e && e.message) || e) })
+        }
+      )
+    })
+  }
+
   function falconStorage() {
     try {
       var f = globalThis.$falcon
@@ -111,38 +137,44 @@ export function createStore(io) {
   async function kvRead(key) {
     var s = falconStorage()
     if (!s) return { ok: false, value: null }
-    try {
-      if (typeof s.getItem === 'function') {
-        var r = await s.getItem({ key: key })
-        return { ok: true, value: unwrapValue(r, key) }
-      }
-      var r2 = await s.getStorage(key)
-      return { ok: true, value: unwrapValue(r2, key) }
-    } catch (e) {
-      return { ok: false, value: null }
+    var attempts = []
+    if (typeof s.getItem === 'function') {
+      attempts.push(function () { return s.getItem({ key: key }) })
+      attempts.push(function () { return s.getItem(key) })
     }
+    if (typeof s.getStorage === 'function') {
+      attempts.push(function () { return s.getStorage(key) })
+      attempts.push(function () { return s.getStorage({ key: key }) })
+    }
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await kvTimeout(attempts[i](), 1500)
+      if (r === '__TIMEOUT__') continue
+      if (r && r.__error__) continue
+      return { ok: true, value: unwrapValue(r, key) }
+    }
+    return { ok: false, value: null }
   }
 
   async function kvWrite(key, text) {
     var s = falconStorage()
     if (!s) return false
-    try {
-      if (typeof s.setItem === 'function') {
-        await s.setItem({ key: key, value: text })
-        return true
-      }
-      await s.setStorage(key, text)
-      return true
-    } catch (e) {
-      try {
-        await s.setItem(key, text)
-        return true
-      } catch (e2) {
-        return false
-      }
+    var attempts = []
+    if (typeof s.setItem === 'function') {
+      attempts.push(function () { return s.setItem({ key: key, value: text }) })
+      attempts.push(function () { return s.setItem(key, text) })
     }
+    if (typeof s.setStorage === 'function') {
+      attempts.push(function () { return s.setStorage(key, text) })
+      attempts.push(function () { return s.setStorage({ key: key, value: text }) })
+    }
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await kvTimeout(attempts[i](), 1500)
+      if (r === '__TIMEOUT__') continue
+      if (r && r.__error__) continue
+      return true
+    }
+    return false
   }
-
   async function read() {
     if (_memory) return _memory
     var d = null

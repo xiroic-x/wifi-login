@@ -162,6 +162,22 @@ export function normalizeRaw(raw, requestedUrl, maxBytes) {
       ? toStatus(r.status) || toStatus(r.statusCode) || toStatus(r.code)
       : 0
   var headers = normalizeHeaders(r && typeof r === 'object' ? r.headers || r.header : null)
+  /*
+   * 保留原始响应头行 (数组形态): 同名头 (典型 Set-Cookie 多行) 在 map 里会互相覆盖,
+   * 适配器需要完整 Cookie 集合时只能从原始行取。非数组输入则按 map 反生成。
+   */
+  var rawLines = []
+  if (r && typeof r === 'object' && Array.isArray(r.headers || r.header)) {
+    var srcLines = r.headers || r.header
+    for (var li = 0; li < srcLines.length; li++) {
+      var it = srcLines[li]
+      if (typeof it === 'string') {
+        if (it.indexOf(':') > 0) rawLines.push(it)
+      } else if (Array.isArray(it) && it.length >= 2) {
+        rawLines.push(String(it[0]) + ': ' + String(it[1]))
+      }
+    }
+  }
   var rawBody = r && typeof r === 'object' ? (r.body != null ? r.body : r.data) : r
   var bytes = bytesOf(rawBody)
   /* 只要前 maxBytes 字节: 检测/门户识别都只看头部, 省掉整篇解码 */
@@ -178,7 +194,7 @@ export function normalizeRaw(raw, requestedUrl, maxBytes) {
   return {
     ok: true,
     statusCode: status,
-    headerLines: lines,
+    headerLines: rawLines.length ? rawLines : lines,
     headers: headers,
     body: bytes,
     text: latin1(bytes),

@@ -84,13 +84,14 @@ curl/wget、mitmproxy/Fiddler/Charles）的具体提取步骤与完整性自查�
 ### 5. 实现适配器
 
 - 复制 `panabit.js` 为 `<协议>.js`（保持接口形态），改协议细节。
+  需要 POST 表单 / 自定义请求头 / Cookie 会话 / 心跳保活的协议，参考 `h3c-imc.js`。
 - 必选：`match`（识别评分 0-100，用 URL/标题/内容的稳定特征加权）、
   `loadConf`（归一化状态 free/ready/manual/other/error）、
   `login`（会话刷新与失败重试在适配器内自理）。
-- 可选：`queryStat`/`logout`/`sync`/`listDevices`/`offOne`/`offAll`
-  （提供 listDevices 才会在界面出现"设备管理"入口）。
+- 可选：`queryStat`/`logout`/`sync`/`listDevices`/`offOne`/`offAll`/`keepAlive`
+  （提供 listDevices 才会在界面出现"设备管理"入口；声明 keepAlive 才会在已认证后继续心跳）。
 - 协议语义全部收口在适配器内，页面不出现协议分支；
-  复用 `adapter-api.js` 的 `qs()`/`sanitize()`。
+  复用 `adapter-api.js` 的 `qs()`/`sanitize()`；用 `log()` 打协议诊断日志便于真机排障。
 
 ### 6. 注册与验证
 

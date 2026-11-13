@@ -4,7 +4,93 @@
 
 ---
 
-## [1.1.4] - 未发布
+## [1.3.0] - 2026-11-13
+
+### 新增
+
+- **CVI 机型真机适配**（固件 1.6.3 / api=1）：重写
+  `ui/src/services/platform/net-cvi.js`，改用固件原生 `$falcon.jsapi.http.request`
+  （唯一可用形态 `{url, method, timeout, headers:['K: v']}`），并把返回翻译成统一形态：
+  - 成功 `{ result: '<响应体字符串>' }` → `{ statusCode: 200, body }`；
+  - 204 空响应 `{ error:3, result:{ errorMessage:'…resCode:204' } }` → `{ statusCode:204, body:空 }`；
+  - 其它 `error` → 请求失败；
+  这样 `detect.js` 的门户判定与 H3C 适配器**无需为 CVI 开特例**。
+- 新增 [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md)：CVI 固件 JSAPI 实测记录
+  （模块清单、`require is not defined`、`http.request` 各形态结果、返回结构、限制与复现方法）。
+
+### 变更
+
+- `detect.js` 门户页解析新增 `portalProxyIP`/`portalProxyPort` 兜底：CVI 固件不返回
+  HTTP 响应头（拿不到 Location），H3C iMC 门户页把认证服务器写在脚本变量里，
+  从页面文本解析出 `serverBase` 供适配器继续走标准流程。
+- `store-core.js` 原生 KV 调用加 1.5s 超时与多形态尝试（`getItem`/`getStorage` 等），
+  避免固件 Promise 挂起拖住启动/检测；取不到时按内存缓存降级。
+- README 平台表 CVI 状态改为「已实测」，并更新能力对照与实测结论。
+- 版本号升至 1.3.0（`ui/package.json` 与 `ui/src/services/version.js` 同步）。
+
+### 待真机复核
+
+- CVI 上 `http.request` 的 **POST body** 字段固件文档未定义，本版同时传 `body`/`data`，
+  并保留 H3C 登录的 query 双写兜底；真实校园网（H3C iMC）需复核一次 POST 是否被接受。
+- 真实门户页的 `portalProxyIP` 解析建议在目标校园网复测（本地已用 mock 页覆盖）。
+
+## [1.2.0] - 2026-11-13
+
+### 新增
+
+- **H3C iMC Portal 认证适配器** (`ui/src/services/portal-adapters/h3c-imc.js`)：
+  适配以 `/portal/?userip=…&userurl=…` 形态跳转的 H3C iMC 门户（如校园网网页认证）。
+  - 自动识别：按跳转参数 `userip`/`userurl`、`/portal/` 路径、门户附加参数与 H3C/iMC 字样加权评分；
+    参数按 **key** 判定，不会把 Panabit 的 `wlanuserip=` 误判为 H3C。
+  - 登录：`POST {serverBase}/portal/pws?t=li`，密码 `base64` 后再 URL 编码；
+    参数同时放 query 与 body（兼容未更新的旧版 `libjsapi_panet.so`）；
+    响应按 `base64 → percent-decode → JSON` 解码，`errorNumber=1` 成功，已在线（`7`+设备拒绝）归一化为已认证。
+  - 心跳与下线参数同样 query+body 双写，旧版 `.so` 也能送达 `serialNo`/`userDevPort`（2026-11-13 真机模拟验证）。
+  - 心跳保活：登录成功后按 `heartBeatCyc` 节流发送 `page/doHeartBeat.jsp`（框架 30s 周期驱动）；
+    新增适配器能力位 `keepAlive`，已认证后仍持续心跳，避免服务器侧会话过期被踢
+    （仅在应用主页前台期间发送；切后台暂停，回前台自动恢复；连续失败 3 次才停止）。
+  - 下线：`pws?t=lo`；iMC 门户页无在线设备列表接口，故不实现设备管理（入口自动隐藏）。
+  - 失败文案：630xx 业务码本地映射为中文（密码错/黑名单/MAC 绑定失败/时段限制等），不依赖 GBK 响应原文。
+  - 协议取证与真机排障实验见 [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)。
+- **传输层支持 POST 表单 body 与自定义请求头**（`native/panet/panet.cpp` + `ui/src/services/net.js`）：
+  `request(url, method, timeout, body, headerText)`；带 CRLF 头注入过滤、body ≤64KB、
+  Host/Content-Length/Connection 由原生层统一管理。旧调用方式完全兼容。
+- **探测识别扩展**：`detect.js` 的门户特征识别与跳转 URL 提取补充 `userurl=/userip=/basip=`、
+  `pws?t=li`、`portal/pws`（带 `[?&]` 位置约束，降低误判）。
+
+### 变更
+
+- 适配器接口新增**可选**能力位 `keepAlive`（`registry.js` 注释与 ADAPTER.md 同步）：
+  为 `true` 时框架在「已认证」状态继续调用 `queryStat` 保活；H3C iMC 为 `true`，Panabit 不设置（行为不变）。
+- 主页本机 IP 显示兼容 iMC 的 `userip`/`clientip` 参数（原仅 `wlanuserip`）。
+- 响应头归一化保留原始头行，多个 `Set-Cookie` 不再互相覆盖（适配器自管 Cookie 会话）。
+- 版本号升至 1.2.0（`ui/package.json` 与 `ui/src/services/version.js` 同步）。
+
+### 重要：安装方式
+
+- 本版 RK 包依赖**新版** `libjsapi_panet.so` 才能发送 POST 表单与 Referer/Cookie 头。
+  覆盖安装同一 appid **不会**重新解包 `libs/*.so`，请先执行
+  `miniapp_cli uninstall 8001865309000001` 再安装（会清空应用数据，含记住的账号）。
+- 若暂时只有旧 `.so`：适配器会把登录参数同时放在 query 串里，仍可能完成认证（待真网验证）；
+  失败时日志 `[H3C]` 行能看到请求/返回码，便于判断是否因缺 body/头导致。
+
+### 待真机/真网验证
+
+- 目标校园网（SSID `<校园网SSID>`，门户 `http://10.65.x.x:8080/portal/`）的 iMC 版本参数、
+  `portalProxyIP`/`portalProxyPort` 页面提取结果、Referer/Cookie 必需性、心跳判据等；
+  逐项观测方法与 curl 判定脚本见 docs/h3c-imc-portal.md 第 7 节。
+- CVI 平台的 `$jsapi/http` 是否接受 `{headers,data}` 尚未真机验证（RK 版为基准）。
+
+### 文档
+
+- 新增 [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)：协议取证（来源/证据等级/返回码表/心跳/下线/
+  不确定清单/真机 curl 实验）。
+- README 与 ADAPTER.md 补充 H3C iMC 适配器、`keepAlive` 契约与 POST/头能力说明。
+
+## [1.1.4] - 未发布（内容已并入 1.2.0 / 1.3.0）
+
+> 以下是 1.1.4 的内容：因 1.2.0 与 1.3.0 已包含这些修复与新增，1.1.4 不再单独发布；
+> 保留本节便于追溯每项改动的来源。
 
 ### 修复
 
@@ -37,6 +123,7 @@
 - 版本号升至 1.1.4（`ui/package.json` 与 `ui/src/services/version.js` 同步），本版本暂未发布。
 
 ---
+
 ## [1.1.3] - 2026-11-01
 
 ### 修复

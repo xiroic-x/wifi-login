@@ -265,10 +265,14 @@ function withTimeout(p, ms, fallback) {
   })
 }
 
-/* 响应体是否带 captive portal 特征 (被透明改写成登录页时用它判定) */
+/* 响应体是否带 captive portal 特征 (被透明改写成登录页时用它判定)
+ * 除 Panabit 的 wlanuserip/paip 参数外, 也覆盖 H3C iMC 门户页的
+ * userip/userurl/basip 参数与 pws?t=li 登录端点特征。 */
 function isPortalText(text) {
   if (!text) return false
-  return /wlanuserip=|paip=|clientmac=|clientip=|iarmdst=|panabit|webauth/i.test(text)
+  return /wlanuserip=|paip=|clientmac=|clientip=|iarmdst=|[?&]userurl=|[?&]userip=|[?&]basip=|panabit|webauth|portal\/pws|\bpws\?t=/i.test(
+    text
+  )
 }
 
 /* 统一错误描述: request 层不 throw, 这里兜底 Promise 被 reject 的异常路径 */
@@ -317,7 +321,7 @@ function extractTitle(text) {
 
 /*
  * 从被劫持的响应内容里找跳转目标。
- * 优先级: 含 wlanuserip/paip/clientmac 的完整 URL > meta refresh > location 赋值。
+ * 优先级: 含 wlanuserip/paip/clientmac/userurl/userip 的完整 URL > meta refresh > location 赋值。
  */
 export function extractRedirect(text) {
   if (!text) return ''
@@ -326,10 +330,27 @@ export function extractRedirect(text) {
   var weak = ''
   for (var i = 0; i < urls.length; i++) {
     var u = urls[i]
-    if (/wlanuserip=|paip=|clientmac=|clientip=/i.test(u)) return trimUrl(u)
+    if (/[?&](?:wlanuserip|userip|userurl|basip|clientmac|clientip|paip)=/i.test(u)) return trimUrl(u)
     if (/portal|auth|login/i.test(u) && !weak) weak = u
   }
   if (best) return trimUrl(best)
+  /*
+   * H3C iMC 门户页把认证服务器写在脚本变量里 (无 Location 可读时, 例如 CVI 固件
+   * 只回响应体不给状态码/头的场景):
+   *   var portalProxyIP = "10.65.169.253"; var portalProxyPort = "8080";
+   * 由它合成门户根地址, 交给适配器按 serverBase 走标准流程。
+   */
+  var pair = text.match(
+    /(?:portalProxyIP|portalIp|portalIP|portalServerIP)\s*[:=]\s*["']([0-9a-fA-F.:\[\]]+)["']/i
+  )
+  if (pair) {
+    var host = pair[1]
+    if (host.indexOf(':') > -1 && host.charAt(0) !== '[') host = '[' + host + ']'
+    var portMatch = text.match(/(?:portalProxyPort|portalPort)\s*[:=]\s*["']?(\d{2,5})/i)
+    var port = portMatch ? portMatch[1] : ''
+    if (port === '80') port = ''
+    return trimUrl('http://' + host + (port ? ':' + port : '') + '/portal/')
+  }
   var m =
     text.match(/http-equiv\s*=\s*["']?refresh["']?[^>]*url\s*=\s*["']?(https?:\/\/[^"'>\s]+)/i) ||
     text.match(/location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i) ||
