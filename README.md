@@ -124,19 +124,26 @@ $falcon.navTo('falcon://8001865309000001/index', { action: 'log' })
 | 平台 | 机型 | 状态 | 产物 |
 | --- | --- | --- | --- |
 | **RK3562**（ARM / aarch64） | 有道词典笔 X6PRO | ✅ 已实测 | `<appid>.<版本>-rk.amr` |
-| **CVITEK**（RISC-V C906） | 搭载 CVI 芯片的机型 | ⚠️ 代码就绪，**待真机验证** | `<appid>.<版本>-cvi.amr` |
+| **CVITEK**（RISC-V C906） | 搭载 CVI 芯片的机型 | ✅ 已实测（CVI 词典笔 / 固件 1.6.3） | `<appid>.<版本>-cvi.amr` |
 
 | 能力 | RK 版 | CVI 版 |
 | --- | --- | --- |
-| 网络请求 | 自研 `panet` 原生库（随包打进 `.so`，支持 POST 表单与自定义头） | 固件原生 `$jsapi/http` |
-| 账号存储 | 文件 `$dataDir/wifi_account.json` | 原生 `$jsapi/system_kv` |
+| 网络请求 | 自研 `panet` 原生库（随包打进 `.so`，支持 POST 表单与自定义头） | 固件原生 `$falcon.jsapi.http.request({url,method,timeout,headers:['K: v']})`（实测；只回响应体，状态码按 `resCode` 合成） |
+| 账号存储 | 文件 `$dataDir/wifi_account.json` | 固件 `$falcon.jsapi.storage`（KV；原生调用带超时与多形态兜底） |
 | 运行日志 | 落盘 `$dataDir/wifi.log` | 内存缓冲（应用内可看，重启清空） |
 | 状态写盘 | `$dataDir/status.json` | 无文件模块，跳过 |
-| WiFi 名称（按网隔离） | 原生 `panet.wifiSsid()` | 无对应 API，回退「最近使用」槽位 |
+| WiFi 名称（按网隔离） | 原生 `panet.wifiSsid()` | `$falcon.env.custom.wifiSsid`（实测可读，实测 `360WiFi-wangwei`） |
 
-CVI 适配依据官方引擎库 [yocop/iot_miniapp_sdk](https://gitee.com/yocop/iot_miniapp_sdk)
-分析实现，尚无真机验证；CVI 机型请下载 `-cvi` 产物，遇问题附机型与日志提 Issue。
-CVI 的 `$jsapi/http` 是否接受 POST body/自定义头（H3C iMC 登录需要）同样**待真机验证**。
+CVI 版真机实测结论（固件 1.6.3 / api=1，详见 [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md)）：
+
+- 运行时**没有 `require`**（`require is not defined`），也没有 `httpbridge`/全局 `fetch`，手册里的
+  “动态 require 兜底”在该固件不可用；网络只能走 `$falcon.jsapi.http`；
+- `http.request` 成功返回 `{ result: '<响应体字符串>' }`，**不返回状态码/响应头**；
+  204 空响应返回 `{ error: 3, result: { errorMessage: '…resCode:204' } }` —— 本版从中解析
+  `resCode` 合成状态码，`detect.js` 的门户判定逻辑无需为 CVI 特殊化；
+- `http.request` 的 POST body 字段固件文档未定义，本版同时传 `body`/`data`，并在
+  H3C 登录时继续保留 query 双写兜底；**CVI 上的 POST 表单仍建议在真实校园网复核一次**。
+
 
 ## 🛠 开发与测试
 

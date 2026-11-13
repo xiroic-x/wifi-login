@@ -4,6 +4,36 @@
 
 ---
 
+## [1.3.0] - 2026-11-13
+
+### 新增
+
+- **CVI 机型真机适配**（固件 1.6.3 / api=1）：重写
+  `ui/src/services/platform/net-cvi.js`，改用固件原生 `$falcon.jsapi.http.request`
+  （唯一可用形态 `{url, method, timeout, headers:['K: v']}`），并把返回翻译成统一形态：
+  - 成功 `{ result: '<响应体字符串>' }` → `{ statusCode: 200, body }`；
+  - 204 空响应 `{ error:3, result:{ errorMessage:'…resCode:204' } }` → `{ statusCode:204, body:空 }`；
+  - 其它 `error` → 请求失败；
+  这样 `detect.js` 的门户判定与 H3C 适配器**无需为 CVI 开特例**。
+- 新增 [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md)：CVI 固件 JSAPI 实测记录
+  （模块清单、`require is not defined`、`http.request` 各形态结果、返回结构、限制与复现方法）。
+
+### 变更
+
+- `detect.js` 门户页解析新增 `portalProxyIP`/`portalProxyPort` 兜底：CVI 固件不返回
+  HTTP 响应头（拿不到 Location），H3C iMC 门户页把认证服务器写在脚本变量里，
+  从页面文本解析出 `serverBase` 供适配器继续走标准流程。
+- `store-core.js` 原生 KV 调用加 1.5s 超时与多形态尝试（`getItem`/`getStorage` 等），
+  避免固件 Promise 挂起拖住启动/检测；取不到时按内存缓存降级。
+- README 平台表 CVI 状态改为「已实测」，并更新能力对照与实测结论。
+- 版本号升至 1.3.0（`ui/package.json` 与 `ui/src/services/version.js` 同步）。
+
+### 待真机复核
+
+- CVI 上 `http.request` 的 **POST body** 字段固件文档未定义，本版同时传 `body`/`data`，
+  并保留 H3C 登录的 query 双写兜底；真实校园网（H3C iMC）需复核一次 POST 是否被接受。
+- 真实门户页的 `portalProxyIP` 解析建议在目标校园网复测（本地已用 mock 页覆盖）。
+
 ## [1.2.0] - 2026-11-13
 
 ### 新增

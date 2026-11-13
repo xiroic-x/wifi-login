@@ -334,6 +334,23 @@ export function extractRedirect(text) {
     if (/portal|auth|login/i.test(u) && !weak) weak = u
   }
   if (best) return trimUrl(best)
+  /*
+   * H3C iMC 门户页把认证服务器写在脚本变量里 (无 Location 可读时, 例如 CVI 固件
+   * 只回响应体不给状态码/头的场景):
+   *   var portalProxyIP = "10.65.169.253"; var portalProxyPort = "8080";
+   * 由它合成门户根地址, 交给适配器按 serverBase 走标准流程。
+   */
+  var pair = text.match(
+    /(?:portalProxyIP|portalIp|portalIP|portalServerIP)\s*[:=]\s*["']([0-9a-fA-F.:\[\]]+)["']/i
+  )
+  if (pair) {
+    var host = pair[1]
+    if (host.indexOf(':') > -1 && host.charAt(0) !== '[') host = '[' + host + ']'
+    var portMatch = text.match(/(?:portalProxyPort|portalPort)\s*[:=]\s*["']?(\d{2,5})/i)
+    var port = portMatch ? portMatch[1] : ''
+    if (port === '80') port = ''
+    return trimUrl('http://' + host + (port ? ':' + port : '') + '/portal/')
+  }
   var m =
     text.match(/http-equiv\s*=\s*["']?refresh["']?[^>]*url\s*=\s*["']?(https?:\/\/[^"'>\s]+)/i) ||
     text.match(/location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i) ||
