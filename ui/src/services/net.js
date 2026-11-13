@@ -53,6 +53,14 @@ function b64ToBytes(b64) {
   return arr
 }
 
+/*
+ * 当前生效的传输通道名 (空串 = 该固件不可用)。
+ * 供日志与兼容性检测使用: 原生扩展以 ES 模块注册, 不在 globalThis 上,
+ * 只能由平台层自报 —— CVI 平台层同样导出本函数(报告固件 JSAPI 通道)。
+ */
+export function describeTransport() {
+  return client() ? 'panet (自研原生库)' : ''
+}
 var request = createRequest(async function (ctx) {
   /* 只解前若干字节的 base64: 响应体可能很大, 全解会在 JS 主线程做 O(n) 运算 */
   var cap = ctx.maxBytes > 0 ? Math.ceil((ctx.maxBytes * 4) / 3) + 8 : 0

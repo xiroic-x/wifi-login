@@ -1,36 +1,42 @@
 <template>
-  <div class="wrapper">
-    <div class="headbar">
-      <text class="title">关于</text>
-      <div class="headbtns">
-        <div class="hbtn" @click="goBack">
-          <text class="hbtn-text">返回</text>
+  <div class="page">
+    <div class="bar">
+      <text class="bartitle">关于</text>
+      <div class="baractions">
+        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
+      </div>
+    </div>
+
+    <scroller class="body">
+      <div class="hero">
+        <div class="logo"><text class="logotext">Wi</text></div>
+        <div class="herotext">
+          <text class="appname">WiFi 网络认证</text>
+          <text class="appdesc">检测 · 登录 · 设备管理，一个页面走完</text>
         </div>
+        <div class="badge"><text class="badgetext">v{{ version }}</text></div>
       </div>
-    </div>
-    <scroller class="aboutscroll">
-      <div class="titlerow">
-        <text class="appname">WiFi 网络认证</text>
-        <div class="verbadge"><text class="verbadge-text">v{{ version }}</text></div>
-      </div>
-      <text class="row">appid: {{ appid }}</text>
-      <text class="section">简介</text>
-      <text class="row">· WiFi 认证上网框架 + 模块化认证适配器 (自动识别认证页类型)</text>
-      <text class="row">· 连通性测试 / 账号密码登录 / 在线设备管理</text>
-      <text class="row">· 内置 Panabit 适配器, 更多认证系统见仓库 ADAPTER.md 适配指南</text>
-      <text class="section">作者</text>
-      <text class="row">· Xiro · 来自 vibe coding 制作</text>
-      <text class="section">开源</text>
-      <text class="row coderow">github.com/soarnext/wifi-login</text>
-      <text class="row">· 许可: 框架 GPLv3 / 适配器与平台层 MIT (分层许可)</text>
-      <text class="section">设备兼容性</text>
-      <text class="row">· 有道词典笔 X6PRO (RK3562): 已实测, 使用 -rk 产物</text>
-      <text class="row">· CVITEK (RISC-V) 机型: 已适配待真机验证, 使用 -cvi 产物</text>
-      <text class="row">· 遇到问题请附机型/固件与日志提交 Issues 或 PR</text>
+
+      <text class="section">能做什么</text>
+      <text class="li">· 连通性检测：204 只当证据，必须非探测源复核才判「无需登入」</text>
+      <text class="li">· 账号登录：内置 Panabit 与 H3C iMC 门户适配器，支持按网络记住密码</text>
+      <text class="li">· 设备管理：Panabit 门户可查看在线设备并下线</text>
+      <text class="li">· 功能检测：看清系统版本、固件能力与兼容性判定</text>
+
+      <text class="section">支持的机型</text>
+      <text class="li">· RK 包：X 系列（RK3562 / RK3566）</text>
+      <text class="li">· CVI 包：S 系列 / X5 系列 / A 系列（32 位）</text>
+      <text class="li">· 界面自适应：横条屏与竖屏全面屏都完整显示</text>
+
+      <text class="section">应用信息</text>
+      <div class="kv"><text class="k">appid</text><text class="v">{{ appid }}</text></div>
+      <div class="kv"><text class="k">版本</text><text class="v">{{ version }}</text></div>
+      <div class="kv"><text class="k">开源</text><text class="v">github.com/soarnext/wifi-login</text></div>
+      <div class="kv"><text class="k">许可</text><text class="v">框架 GPLv3 · 适配器与平台层 MIT</text></div>
+      <div class="kv"><text class="k">作者</text><text class="v">Xiro</text></div>
+
+      <text class="tip">遇到问题请附机型、版本与「功能检测」页的自检结果提交 Issue。</text>
     </scroller>
-    <div class="statusbar">
-      <text class="statusinfo">开源: github.com/soarnext/wifi-login  |  仅 X6PRO 实测, 其他机型请提 Issues / PR</text>
-    </div>
   </div>
 </template>
 
@@ -40,114 +46,53 @@ import { APP_VERSION, APP_ID } from '../../services/version.js'
 export default {
   name: 'about',
   data() {
-    return {
-      version: APP_VERSION,
-      appid: APP_ID,
-    }
+    return { version: APP_VERSION, appid: APP_ID }
   },
   methods: {
     onShow() {},
     onHide() {},
     onUnload() {},
-    goBack() {
-      this.$page.finish()
-    },
+    goBack() { this.$page.finish() },
   },
 }
 </script>
 
 <style>
-.wrapper {
-  width: 100%;
-  height: 100%;
-  background-color: #000000;
-  flex-direction: column;
+/* 设计语言: 背景 #0b0c0e / 面板 #14161a / 分隔 #24272e / 主色 #4c9aff
+ * 文字 #f2f4f8 / 次要 #9aa4b2 / 弱 #6b7480 · 顶栏 44 · 圆角 8 · 全部百分比宽度 */
+.page { width: 100%; height: 100%; background-color: #0b0c0e; flex-direction: column; }
+.bar {
+  width: 100%; height: 44px; background-color: #14161a;
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 16px; padding-right: 12px; flex-wrap: wrap;
 }
-.headbar {
-  width: 100%;
-  height: 44px;
-  background-color: #141414;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  padding-left: 20px;
-  padding-right: 16px;
+.bartitle { font-size: 22px; color: #f2f4f8; font-weight: bold; }
+.baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.btn {
+  height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
+  align-items: center; justify-content: center; margin-left: 8px;
 }
-.title {
-  font-size: 26px;
-  color: #ffffff;
-  font-weight: bold;
+.btn.ghost { background-color: #24272e; }
+.btntext { font-size: 15px; color: #f2f4f8; }
+.body { flex: 1; padding-left: 16px; padding-right: 16px; padding-top: 10px; }
+.hero { flex-direction: row; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.logo {
+  width: 42px; height: 42px; border-radius: 10px; background-color: #4c9aff;
+  align-items: center; justify-content: center; margin-right: 12px;
 }
-.headbtns {
-  flex-direction: row;
-  align-items: center;
+.logotext { font-size: 20px; color: #ffffff; font-weight: bold; }
+.herotext { flex: 1; flex-direction: column; }
+.appname { font-size: 20px; color: #f2f4f8; font-weight: bold; }
+.appdesc { font-size: 14px; color: #9aa4b2; margin-top: 2px; }
+.badge {
+  padding-left: 10px; padding-right: 10px; height: 24px; border-radius: 12px;
+  background-color: #1b2735; align-items: center; justify-content: center;
 }
-.hbtn {
-  width: 90px;
-  height: 32px;
-  border-radius: 16px;
-  background-color: #333333;
-  align-items: center;
-  justify-content: center;
-}
-.hbtn-text {
-  font-size: 17px;
-  color: #ffffff;
-}
-.aboutscroll {
-  width: 100%;
-  height: 198px;
-  padding-left: 20px;
-  padding-right: 20px;
-  padding-top: 10px;
-}
-.titlerow {
-  flex-direction: row;
-  align-items: center;
-}
-.appname {
-  font-size: 22px;
-  color: #37c2a0;
-  font-weight: bold;
-  margin-right: 10px;
-}
-.verbadge {
-  height: 26px;
-  border-radius: 13px;
-  background-color: #143326;
-  align-items: center;
-  justify-content: center;
-  padding-left: 10px;
-  padding-right: 10px;
-}
-.verbadge-text {
-  font-size: 14px;
-  color: #6fe3c0;
-}
-.section {
-  font-size: 17px;
-  color: #ffb648;
-  font-weight: bold;
-  margin-top: 8px;
-  margin-bottom: 4px;
-}
-.row {
-  font-size: 15px;
-  color: #cccccc;
-  margin-bottom: 3px;
-}
-.coderow {
-  color: #8fb7e8;
-}
-.statusbar {
-  width: 100%;
-  height: 24px;
-  background-color: #141414;
-  justify-content: center;
-  padding-left: 20px;
-}
-.statusinfo {
-  font-size: 13px;
-  color: #888888;
-}
+.badgetext { font-size: 13px; color: #4c9aff; }
+.section { font-size: 15px; color: #4c9aff; font-weight: bold; margin-top: 10px; margin-bottom: 4px; }
+.li { font-size: 14px; color: #d7dce4; margin-bottom: 3px; }
+.kv { flex-direction: row; margin-bottom: 3px; flex-wrap: wrap; }
+.k { width: 76px; font-size: 14px; color: #6b7480; }
+.v { flex: 1; font-size: 14px; color: #d7dce4; }
+.tip { font-size: 13px; color: #6b7480; margin-top: 12px; margin-bottom: 14px; }
 </style>

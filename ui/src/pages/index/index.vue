@@ -1,125 +1,97 @@
 <template>
-  <div class="wrapper">
-    <div class="headbar">
-      <div class="titlerow">
-        <div class="logo"><text class="logo-text">Wi</text></div>
-        <text class="title">WiFi 网络认证</text>
+  <div class="page">
+    <!-- 顶栏 -->
+    <div class="bar">
+      <div class="brand">
+        <div class="logo"><text class="logotext">Wi</text></div>
+        <text class="brandname">WiFi 网络认证</text>
       </div>
-      <div class="headbtns">
-        <div class="headbtn headbtn-sm" @click="openDiag">
-          <text class="headbtn-text">检测</text>
-        </div>
-        <div class="headbtn headbtn-sm" @click="openAbout">
-          <text class="headbtn-text">关于</text>
-        </div>
-        <div class="headbtn" @click="runCheck(null, true)">
-          <text class="headbtn-text">{{ checking ? '检测中…' : '重新检测' }}</text>
-        </div>
-      </div>
-    </div>
-    <div class="divider"></div>
-
-    <!-- 状态区不再绑定点击重检: 只有顶栏「重新检测」按钮会触发检测 -->
-    <div class="statusarea">
-      <div class="statusmain">
-        <div class="statusline">
-          <div class="statusdot statusdot-free" v-if="pageState === 'free'"></div>
-          <div class="statusdot statusdot-ok" v-if="pageState === 'ok'"></div>
-          <div class="statusdot statusdot-portal" v-if="pageState === 'portal'"></div>
-          <div class="statusdot statusdot-offline" v-if="pageState === 'offline'"></div>
-          <div class="statusdot statusdot-busy" v-if="pageState === 'busy'"></div>
-          <div class="statusdot statusdot-busy" v-if="pageState === 'manual'"></div>
-          <text class="status status-free" v-if="pageState === 'free'">无需登入</text>
-          <text class="status status-ok" v-if="pageState === 'ok'">认证成功，无需登入</text>
-          <text class="status status-portal" v-if="pageState === 'portal'">需要认证</text>
-          <text class="status status-offline" v-if="pageState === 'offline'">无网络连接</text>
-          <text class="status status-busy" v-if="pageState === 'busy'">正在检测…</text>
-          <text class="status status-busy" v-if="pageState === 'manual'">需要认证（未识别服务器）</text>
-        </div>
-      </div>
-      <div class="statusinfo">
-        <div class="inforow" v-if="probeName">
-          <text class="infolabel">连通性测试</text>
-          <text class="infovalue">{{ probeName }}</text>
-        </div>
-        <div class="inforow" v-if="compatWarn">
-        <text class="infolabel">兼容性</text>
-        <text class="infovalue compatwarn">{{ compatWarn }}</text>
-      </div>
-      <div class="inforow" v-if="serverShow">
-          <text class="infolabel">认证服务器</text>
-          <text class="infovalue">{{ serverShow }}</text>
-        </div>
-        <div class="inforow" v-if="portalPage">
-          <text class="infolabel">跳转页面</text>
-          <text class="infovalue">{{ portalPage }}</text>
-        </div>
-        <div class="inforow" v-if="deviceIp">
-          <text class="infolabel">本机参数</text>
-          <text class="infovalue">{{ deviceIp }}</text>
+      <div class="baractions">
+        <div class="btn ghost" @click="openDiag"><text class="btntext">检测</text></div>
+        <div class="btn ghost" @click="openAbout"><text class="btntext">关于</text></div>
+        <div class="btn primary" @click="runCheck(null, true)">
+          <text class="btntext">{{ checking ? '检测中…' : '重新检测' }}</text>
         </div>
       </div>
     </div>
 
-    <div class="formrow" v-if="showForm || canLogout">
-      <div class="field" v-if="showForm" @click="editUsername">
-        <text class="fieldlabel">账号</text>
-        <text class="fieldvalue" v-if="username">{{ username }}</text>
-        <text class="fieldvalue fieldplaceholder" v-if="!username">点此输入账号</text>
+    <!-- 状态卡: 结论 + 依据 -->
+    <div class="status" :class="stateClass">
+      <div class="statusleft">
+        <div class="dot" :class="stateClass"></div>
+        <text class="statetext">{{ stateText }}</text>
       </div>
-      <div class="field" v-if="showForm" @click="editPassword">
-        <text class="fieldlabel">密码</text>
-        <!-- 已记住的密码不显示明文, 仅显示掩码长度; 新输入的密码短暂可见 -->
-        <text class="fieldvalue" v-if="pwdMask && !pwdRevealed">{{ pwdMask }}</text>
-        <text class="fieldvalue" v-if="password && pwdRevealed">{{ password }}</text>
-        <text class="fieldvalue fieldplaceholder" v-if="!password">点此输入密码</text>
-      </div>
-      <div class="remember" v-if="showForm" @click="toggleRemember">
-        <text class="remembertext remembertext-on" v-if="remember">已记住密码</text>
-        <text class="remembertext" v-if="!remember">记住密码</text>
-      </div>
-      <div class="btn btn-login" v-if="showForm && !logging" @click="doLogin">
-        <text class="btn-text">登 录</text>
-      </div>
-      <div class="btn btn-busy" v-if="showForm && logging">
-        <text class="btn-text">登录中…</text>
-      </div>
-      <div class="btn btn-manage" v-if="canLogout && canManage" @click="openManagement">
-        <text class="btn-text">设备管理</text>
-      </div>
-      <div class="btn btn-logout" v-if="canLogout" @click="doLogout">
-        <text class="btn-text btn-text-logout">下 线</text>
+      <div class="statusright">
+        <text class="metaline" v-if="probeName">连通性 {{ probeName }}</text>
+        <text class="metaline" v-if="serverShow">服务器 {{ serverShow }}</text>
+        <text class="metaline warnline" v-if="compatWarn">兼容性 {{ compatWarn }}</text>
+        <text class="metaline" v-if="portalPage">跳转 {{ portalPage }}</text>
+        <text class="metaline" v-if="deviceIp">本机 {{ deviceIp }}</text>
       </div>
     </div>
 
-    <!-- 认证类型选择: 自动识别不出时让用户手选适配器 -->
-    <div class="formrow" v-if="showAdapterPick">
-      <text class="picklabel">认证类型</text>
-      <div class="pickbtn" v-for="a in adapters" :key="a.id" @click="pickAdapter(a)">
-        <text class="pickbtn-text" :class="{ 'pickbtn-text-on': activeAdapterId === a.id }">{{ a.name }}</text>
+    <!-- 登录表单 -->
+    <div class="panel" v-if="showForm || canLogout">
+      <div class="fields" v-if="showForm">
+        <div class="field" @click="editUsername">
+          <text class="fieldlabel">账号</text>
+          <text class="fieldvalue" v-if="username">{{ username }}</text>
+          <text class="fieldvalue placeholder" v-if="!username">点此输入账号</text>
+        </div>
+        <div class="field" @click="editPassword">
+          <text class="fieldlabel">密码</text>
+          <!-- 已记住的密码只显示掩码; 新输入的短暂可见 -->
+          <text class="fieldvalue" v-if="pwdMask && !pwdRevealed">{{ pwdMask }}</text>
+          <text class="fieldvalue" v-if="password && pwdRevealed">{{ password }}</text>
+          <text class="fieldvalue placeholder" v-if="!password">点此输入密码</text>
+        </div>
+        <div class="switch" @click="toggleRemember">
+          <div class="switchbox" :class="{ on: remember }"></div>
+          <text class="switchtext">{{ remember ? '记住密码' : '不记住密码' }}</text>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="btn primary" v-if="showForm && !logging" @click="doLogin">
+          <text class="btntext">登 录</text>
+        </div>
+        <div class="btn ghost" v-if="showForm && logging">
+          <text class="btntext">登录中…</text>
+        </div>
+        <div class="btn ghost" v-if="canLogout && canManage" @click="openManagement">
+          <text class="btntext">设备管理</text>
+        </div>
+        <div class="btn danger" v-if="canLogout" @click="doLogout">
+          <text class="btntext">下 线</text>
+        </div>
       </div>
     </div>
 
-    <div class="formrow" v-if="showManualServer">
-      <div class="field field-wide" @click="editServer">
+    <!-- 认证类型手选 -->
+    <div class="panel" v-if="showAdapterPick">
+      <text class="panellabel">认证类型</text>
+      <div class="chips">
+        <div class="chip" v-for="a in adapters" :key="a.id" @click="pickAdapter(a)">
+          <text class="chiptext" :class="{ on: activeAdapterId === a.id }">{{ a.name }}</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手动服务器 -->
+    <div class="panel" v-if="showManualServer">
+      <div class="field wide" @click="editServer">
         <text class="fieldlabel">服务器</text>
-        <text class="fieldvalue-wide" v-if="manualServer">{{ manualServer }}</text>
-        <text class="fieldvalue-wide fieldplaceholder" v-if="!manualServer">点此输入认证服务器IP[:端口]</text>
+        <text class="fieldvalue" v-if="manualServer">{{ manualServer }}</text>
+        <text class="fieldvalue placeholder" v-if="!manualServer">点此输入认证服务器 IP[:端口]</text>
       </div>
-      <div class="btn btn-login" @click="applyManualServer">
-        <text class="btn-text">确 定</text>
+      <div class="actions">
+        <div class="btn primary" @click="applyManualServer"><text class="btntext">确 定</text></div>
       </div>
     </div>
 
-    <div class="divider"></div>
-    <div class="msgrow">
-      <div class="msgbar msgbar-error" v-if="msgType === 'error' && msg"></div>
-      <div class="msgbar msgbar-warn" v-if="msgType === 'warn' && msg"></div>
-      <div class="msgbar msgbar-info" v-if="msgType === 'info'"></div>
-      <text class="msg msg-error" v-if="msgType === 'error'">{{ msg }}</text>
-      <text class="msg msg-warn" v-if="msgType === 'warn'">{{ msg }}</text>
-      <text class="msg msg-info" v-if="msgType === 'info'">{{ msg }}</text>
-      <text class="msg msg-info" v-if="!msg">就绪</text>
+    <!-- 底部状态条 -->
+    <div class="foot">
+      <div class="dot sm" :class="msgClass"></div>
+      <text class="foottext" :class="msgClass">{{ msg || '就绪' }}</text>
     </div>
   </div>
 </template>
@@ -177,6 +149,16 @@ export default {
     }
   },
   computed: {
+    /* 状态文案与配色: 与 pageState 一一对应 */
+    stateText() {
+      var m = {
+        free: '无需登入', ok: '认证成功，无需登入', portal: '需要认证',
+        offline: '无网络连接', busy: '正在检测…', manual: '需要认证（未识别服务器）',
+      }
+      return m[this.pageState] || '正在检测…'
+    },
+    stateClass() { return this.pageState || 'busy' },
+    msgClass() { return this.msgType === 'error' ? 'error' : (this.msgType === 'warn' ? 'warn' : 'info') },
     /* 当前使用的认证适配器 (由 activeAdapterId 解析; 未选择时为 null) */
     activeAdapter() {
       return byId(this.activeAdapterId)
@@ -1160,316 +1142,96 @@ export default {
   },
 }
 </script>
-
 <style>
-.wrapper {
-  width: 100%;
-  height: 100%;
-  background-color: #000000;
-  flex-direction: column;
+/* 设计语言: 背景 #0b0c0e / 面板 #14161a / 分隔 #24272e / 主色 #4c9aff
+ * 成功 #35c46b / 警示 #ffb020 / 危险 #e5484d / 文字 #f2f4f8 / 次要 #9aa4b2 / 弱 #6b7480
+ * 顶栏 44 · 圆角 8 · 间距 8/12/16 · 宽度全部百分比 + flex-wrap(横条屏与竖屏通用) */
+.page { width: 100%; height: 100%; background-color: #0b0c0e; flex-direction: column; }
+.bar {
+  width: 100%; height: 44px; background-color: #14161a;
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 14px; padding-right: 10px; flex-wrap: wrap;
 }
-.headbar {
-  width: 100%;
-  height: 44px;
-  background-color: #141414;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  padding-left: 20px;
-  padding-right: 16px;
-}
-.titlerow {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
+.brand { flex-direction: row; align-items: center; }
 .logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background-color: #2f7bd9;
-  align-items: center;
-  justify-content: center;
-  margin-right: 10px;
+  width: 26px; height: 26px; border-radius: 7px; background-color: #4c9aff;
+  align-items: center; justify-content: center; margin-right: 8px;
 }
-.logo-text {
-  font-size: 15px;
-  color: #ffffff;
-  font-weight: bold;
-}
-.title {
-  font-size: 26px;
-  color: #ffffff;
-  font-weight: bold;
-}
-.headbtns {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.headbtn {
-  width: 130px;
-  height: 32px;
-  border-radius: 16px;
-  background-color: #2f7bd9;
-  align-items: center;
-  justify-content: center;
-}
-.headbtn-sm {
-  width: 90px;
-  margin-right: 10px;
-  background-color: #333333;
-}
-.headbtn-text {
-  font-size: 18px;
-  color: #ffffff;
-}
-.divider {
-  width: 100%;
-  height: 1px;
-  background-color: #222222;
-}
-.statusarea {
-  width: 100%;
-  height: 100px;
-  background-color: #000000;
-  flex-direction: row;
-  flex-wrap: wrap;
-  padding-left: 20px;
-  padding-right: 20px;
-}
-.statusmain {
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-}
-.statusline {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.statusdot {
-  width: 14px;
-  height: 14px;
-  border-radius: 7px;
-  margin-right: 12px;
-}
-.statusdot-free {
-  background-color: #37c2a0;
-}
-.statusdot-ok {
-  background-color: #37c2a0;
-}
-.statusdot-portal {
-  background-color: #ffb648;
-}
-.statusdot-offline {
-  background-color: #ff6b6b;
-}
-.statusdot-busy {
-  background-color: #8fb7e8;
-}
-.status {
-  font-size: 36px;
-  font-weight: bold;
-  height: 44px;
-}
-.status-free {
-  color: #37c2a0;
-}
-.status-ok {
-  color: #37c2a0;
-}
-.status-portal {
-  color: #ffb648;
-}
-.status-offline {
-  color: #ff6b6b;
-}
-.status-busy {
-  color: #8fb7e8;
-}
-.statusinfo {
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-}
-.inforow {
-  height: 20px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-.infolabel {
-  width: 100px;
-  font-size: 14px;
-  color: #888888;
-}
-.infovalue {
-  flex: 1;
-  font-size: 14px;
-  color: #cccccc;
-  lines: 1;
-  text-overflow: ellipsis;
-}
-.formrow {
-  width: 100%;
-  height: 60px;
-  background-color: #141414;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 16px;
-  padding-right: 16px;
-}
-.field {
-  flex: 1;
-  height: 42px;
-  background-color: #1a1a1a;
-  border-radius: 8px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 12px;
-  margin-right: 12px;
-}
-.field-wide {
-  flex: 1;
-}
-.fieldlabel {
-  width: 52px;
-  font-size: 18px;
-  color: #888888;
-}
-.fieldvalue {
-  width: 190px;
-  font-size: 18px;
-  color: #ffffff;
-  lines: 1;
-  text-overflow: ellipsis;
-}
-.fieldvalue-wide {
-  flex: 1;
-  font-size: 18px;
-  color: #ffffff;
-  lines: 1;
-  text-overflow: ellipsis;
-}
-.fieldplaceholder {
-  color: #555555;
-}
-.picklabel {
-  width: 110px;
-  font-size: 18px;
-  color: #888888;
-}
-.pickbtn {
-  height: 42px;
-  border-radius: 8px;
-  background-color: #1a1a1a;
-  align-items: center;
-  justify-content: center;
-  margin-right: 10px;
-  padding-left: 16px;
-  padding-right: 16px;
-}
-.pickbtn-text {
-  font-size: 18px;
-  color: #cccccc;
-}
-.pickbtn-text-on {
-  color: #37c2a0;
-  font-weight: bold;
-}
-.remember {
-  width: 120px;
-  height: 42px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-right: 10px;
-}
-.remembertext {
-  font-size: 18px;
-  color: #cccccc;
-}
-.remembertext-on {
-  color: #37c2a0;
-}
+.logotext { font-size: 15px; color: #ffffff; font-weight: bold; }
+.brandname { font-size: 20px; color: #f2f4f8; font-weight: bold; }
+.baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .btn {
-  height: 42px;
-  border-radius: 8px;
-  align-items: center;
-  justify-content: center;
-  margin-right: 10px;
+  height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
+  align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn-login {
-  width: 130px;
-  background-color: #2f7bd9;
+.btn.ghost { background-color: #24272e; }
+.btn.primary { background-color: #4c9aff; }
+.btn.danger { background-color: #b3261e; }
+.btntext { font-size: 14px; color: #ffffff; }
+.status {
+  width: 100%; flex-direction: row; padding: 8px 14px; flex-wrap: wrap;
+  background-color: #101215; border-bottom-width: 1px; border-bottom-color: #24272e;
+  border-left-width: 3px; border-left-color: #24272e;
 }
-.btn-busy {
-  width: 130px;
-  background-color: #1e3a5f;
+.status.free { border-left-color: #35c46b; }
+.status.ok { border-left-color: #35c46b; }
+.status.portal { border-left-color: #4c9aff; }
+.status.offline { border-left-color: #e5484d; }
+.status.busy { border-left-color: #ffb020; }
+.status.manual { border-left-color: #ffb020; }
+.statusleft { flex-direction: row; align-items: center; margin-right: 20px; }
+.statusright { flex: 1; flex-direction: row; align-items: center; flex-wrap: wrap; }
+.dot { width: 9px; height: 9px; border-radius: 5px; margin-right: 8px; background-color: #6b7480; }
+.dot.sm { width: 7px; height: 7px; border-radius: 4px; }
+.dot.free { background-color: #35c46b; }
+.dot.ok { background-color: #35c46b; }
+.dot.portal { background-color: #4c9aff; }
+.dot.offline { background-color: #e5484d; }
+.dot.busy { background-color: #ffb020; }
+.dot.manual { background-color: #ffb020; }
+.dot.info { background-color: #4c9aff; }
+.dot.warn { background-color: #ffb020; }
+.dot.error { background-color: #e5484d; }
+.statetext { font-size: 18px; color: #f2f4f8; font-weight: bold; }
+.metaline { font-size: 12px; color: #9aa4b2; margin-right: 14px; }
+.warnline { color: #ffb020; }
+.panel {
+  width: 100%; padding: 8px 14px; flex-direction: row; align-items: center; flex-wrap: wrap;
+  background-color: #0b0c0e; border-bottom-width: 1px; border-bottom-color: #1b1e24;
 }
-.btn-manage {
-  width: 140px;
-  background-color: #24466b;
+.panellabel { font-size: 13px; color: #6b7480; margin-right: 10px; }
+.fields { flex: 1; flex-direction: row; align-items: center; flex-wrap: wrap; }
+.field {
+  height: 32px; min-width: 150px; flex: 1; max-width: 240px; margin-right: 10px; margin-bottom: 4px;
+  background-color: #14161a; border-radius: 8px; padding-left: 10px; padding-right: 10px;
+  flex-direction: row; align-items: center; border-width: 1px; border-color: #24272e;
 }
-.btn-logout {
-  width: 100px;
-  background-color: #1a1a1a;
+.field.wide { max-width: none; }
+.fieldlabel { font-size: 13px; color: #6b7480; margin-right: 8px; }
+.fieldvalue { font-size: 14px; color: #f2f4f8; flex: 1; }
+.placeholder { color: #5c6470; }
+.switch { flex-direction: row; align-items: center; margin-right: 10px; }
+.switchbox {
+  width: 30px; height: 17px; border-radius: 9px; background-color: #2c3138; margin-right: 7px;
 }
-.btn-text {
-  font-size: 20px;
-  color: #ffffff;
-  font-weight: bold;
+.switchbox.on { background-color: #35c46b; }
+.switchtext { font-size: 13px; color: #9aa4b2; }
+.actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.chips { flex-direction: row; flex-wrap: wrap; flex: 1; }
+.chip {
+  height: 28px; padding-left: 12px; padding-right: 12px; border-radius: 14px;
+  background-color: #14161a; border-width: 1px; border-color: #24272e;
+  align-items: center; justify-content: center; margin-right: 8px; margin-bottom: 4px;
 }
-.btn-text-logout {
-  color: #ff7b7b;
-  font-weight: normal;
+.chiptext { font-size: 13px; color: #9aa4b2; }
+.chiptext.on { color: #4c9aff; font-weight: bold; }
+.foot {
+  width: 100%; height: 30px; flex-direction: row; align-items: center;
+  padding-left: 14px; padding-right: 14px; background-color: #101215;
+  border-top-width: 1px; border-top-color: #24272e;
 }
-.msgrow {
-  width: 100%;
-  flex: 1;
-  background-color: #000000;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 20px;
-  padding-right: 20px;
-}
-.msgbar {
-  width: 4px;
-  height: 40px;
-  border-radius: 2px;
-  margin-right: 12px;
-}
-.msgbar-error {
-  background-color: #ff6b6b;
-}
-.msgbar-warn {
-  background-color: #ffb648;
-}
-.msgbar-info {
-  background-color: #2f7bd9;
-}
-.msg {
-  font-size: 16px;
-  lines: 2;
-  flex: 1;
-}
-.msg-error {
-  color: #ff7b7b;
-}
-.msg-warn {
-  color: #ffd48a;
-}
-.msg-info {
-  color: #a8c8ee;
-}
-.compatwarn {
-  color: #ffb84d;
-}
-
+.foottext { font-size: 13px; color: #9aa4b2; flex: 1; }
+.foottext.warn { color: #ffb020; }
+.foottext.error { color: #ff8a8d; }
 </style>
+

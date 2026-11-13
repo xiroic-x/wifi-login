@@ -1,72 +1,68 @@
 <template>
-  <div class="wrapper">
-    <div class="headbar">
-      <text class="title">设备管理</text>
-      <div class="headbtns">
-        <div class="hbtn hbtn-refresh" @click="reload">
-          <text class="hbtn-text">{{ loading ? '刷新中…' : '刷新' }}</text>
+  <div class="page">
+    <div class="bar">
+      <text class="bartitle">设备管理</text>
+      <div class="baractions">
+        <div class="btn ghost" @click="reload">
+          <text class="btntext">{{ loading ? '刷新中…' : '刷新' }}</text>
         </div>
-        <div class="hbtn hbtn-all" @click="confirmOffAll">
-          <text class="hbtn-text">全部下线</text>
+        <div class="btn ghost" @click="confirmOffAll">
+          <text class="btntext">全部下线</text>
         </div>
-        <div class="hbtn hbtn-back" @click="goBack">
-          <text class="hbtn-text">返回</text>
+        <div class="btn ghost" @click="goBack">
+          <text class="btntext">返回</text>
         </div>
       </div>
     </div>
 
-    <div class="inforow">
-      <text class="infolabel">认证服务器</text>
-      <text class="infovalue">{{ serverShow || '未知' }}</text>
-      <div class="countwrap">
-        <div class="countdot"></div>
-        <text class="infocount">在线 {{ devices.length }} 台</text>
+    <div class="summary">
+      <div class="sumcell">
+        <text class="sumk">认证服务器</text>
+        <text class="sumv">{{ serverShow || '未知' }}</text>
+      </div>
+      <div class="sumcell">
+        <text class="sumk">本机 IP</text>
+        <text class="sumv">{{ selfIp || '—' }}</text>
+      </div>
+      <div class="sumcell sumcell-num">
+        <text class="sumk">在线</text>
+        <text class="sumnum">{{ devices.length }}</text>
       </div>
     </div>
 
-    <scroller class="devscroll">
-      <div class="devitem" :class="{ 'devitem-self': d.isSelf }" v-for="(d, i) in devices" :key="d.ipstr || i">
-        <div class="devmain">
-          <text class="devname">{{ d.name || '未知设备' }}</text>
-          <text class="devmeta">IP {{ d.ipstr }}  MAC {{ d.clntmac || '—' }}  {{ d.birth || '' }}</text>
+    <scroller class="list">
+      <div class="item" :class="{ self: d.isSelf }" v-for="(d, i) in devices" :key="d.ipstr || i">
+        <div class="itemmain">
+          <div class="itemrow">
+            <text class="itemname">{{ d.name || '未知设备' }}</text>
+            <div class="tag" v-if="d.isSelf"><text class="tagtext">本机</text></div>
+          </div>
+          <text class="itemmeta">IP {{ d.ipstr }} · MAC {{ d.clntmac || '—' }}{{ d.birth ? ' · ' + d.birth : '' }}</text>
         </div>
-        <div class="devtag" v-if="d.isSelf">
-          <text class="devtag-text">本机</text>
+        <div class="btn danger sm" v-if="offing !== d.ipstr" @click="confirmOffOne(d)">
+          <text class="btntext">下线</text>
         </div>
-        <div class="devbtn" v-if="offing !== d.ipstr" @click="confirmOffOne(d)">
-          <text class="devbtn-text">下线</text>
-        </div>
-        <div class="devbtn devbtn-busy" v-if="offing === d.ipstr">
-          <text class="devbtn-text">下线中…</text>
+        <div class="btn ghost sm" v-if="offing === d.ipstr">
+          <text class="btntext">下线中…</text>
         </div>
       </div>
-      <text class="devempty" v-if="!loading && !devices.length">{{ emptyText }}</text>
-      <text class="devempty" v-if="loading && !devices.length">正在获取设备列表…</text>
+      <text class="empty" v-if="!loading && !devices.length">{{ emptyText }}</text>
+      <text class="empty" v-if="loading && !devices.length">正在获取设备列表…</text>
+      <div style="height: 8px;"></div>
     </scroller>
 
-    <div class="msgrow">
-      <div class="msgbar msgbar-error" v-if="msgType === 'error' && msg"></div>
-      <div class="msgbar msgbar-warn" v-if="msgType === 'warn' && msg"></div>
-      <div class="msgbar msgbar-info" v-if="msgType === 'info'"></div>
-      <text class="msg msg-error" v-if="msgType === 'error'">{{ msg }}</text>
-      <text class="msg msg-warn" v-if="msgType === 'warn'">{{ msg }}</text>
-      <text class="msg msg-info" v-if="msgType === 'info'">{{ msg }}</text>
-      <text class="msg msg-info" v-if="!msg">就绪</text>
+    <div class="foot">
+      <div class="dot" :class="msgClass"></div>
+      <text class="foottext" :class="msgClass">{{ msg || '就绪' }}</text>
     </div>
 
-    <!-- 确认弹层: 替代原生 confirmDialog, 适配横条屏 -->
     <div class="mask" v-if="ask.show">
       <div class="dialog">
         <text class="dlgtitle">确认操作</text>
-        <div class="dlgdivider"></div>
         <text class="dlgtext">{{ ask.text }}</text>
         <div class="dlgbtns">
-          <div class="dlgbtn dlgbtn-cancel" @click="ask.show = false">
-            <text class="dlgbtn-text">取消</text>
-          </div>
-          <div class="dlgbtn dlgbtn-ok" @click="ask.confirm()">
-            <text class="dlgbtn-text">确定</text>
-          </div>
+          <div class="btn ghost" @click="ask.show = false"><text class="btntext">取消</text></div>
+          <div class="btn danger" @click="ask.confirm()"><text class="btntext">确定</text></div>
         </div>
       </div>
     </div>
@@ -84,6 +80,9 @@ const STALE_MS = 20000
 const MAX_FAILS = 2
 
 export default {
+  computed: {
+    msgClass() { return this.msgType === 'error' ? 'error' : (this.msgType === 'warn' ? 'warn' : 'info') },
+  },
   name: 'management',
   data() {
     return {
@@ -419,276 +418,72 @@ export default {
   },
 }
 </script>
-
 <style>
-.wrapper {
-  width: 100%;
-  height: 100%;
-  background-color: #000000;
-  flex-direction: column;
+/* 设计语言与其它页一致: 背景 #0b0c0e / 卡片 #14161a / 主色 #4c9aff / 危险 #e5484d
+ * 宽度全部百分比 + flex-wrap, 横条屏与竖屏都完整显示 */
+.page { width: 100%; height: 100%; background-color: #0b0c0e; flex-direction: column; }
+.bar {
+  width: 100%; height: 44px; background-color: #14161a;
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 16px; padding-right: 12px; flex-wrap: wrap;
 }
-.headbar {
-  width: 100%;
-  height: 44px;
-  background-color: #141414;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  padding-left: 20px;
-  padding-right: 16px;
+.bartitle { font-size: 22px; color: #f2f4f8; font-weight: bold; }
+.baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.btn {
+  height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
+  align-items: center; justify-content: center; margin-left: 8px;
 }
-.title {
-  font-size: 26px;
-  color: #ffffff;
-  font-weight: bold;
+.btn.ghost { background-color: #24272e; }
+.btn.danger { background-color: #b3261e; }
+.btn.sm { height: 28px; padding-left: 12px; padding-right: 12px; border-radius: 14px; margin-left: 8px; }
+.btntext { font-size: 14px; color: #f2f4f8; }
+.summary {
+  width: 100%; flex-direction: row; padding: 8px 16px; flex-wrap: wrap;
+  background-color: #101215; border-bottom-width: 1px; border-bottom-color: #24272e;
 }
-.headbtns {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
+.sumcell { flex-direction: column; margin-right: 24px; }
+.sumcell-num { margin-right: 0; }
+.sumk { font-size: 12px; color: #6b7480; }
+.sumv { font-size: 14px; color: #d7dce4; }
+.sumnum { font-size: 18px; color: #4c9aff; font-weight: bold; }
+.list { flex: 1; padding-left: 14px; padding-right: 14px; padding-top: 8px; }
+.item {
+  background-color: #14161a; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;
+  flex-direction: row; align-items: center; border-left-width: 3px; border-left-color: #24272e; flex-wrap: wrap;
 }
-.hbtn {
-  width: 110px;
-  height: 32px;
-  border-radius: 16px;
-  background-color: #24466b;
-  align-items: center;
-  justify-content: center;
-  margin-left: 10px;
+.item.self { border-left-color: #4c9aff; background-color: #131a24; }
+.itemmain { flex: 1; flex-direction: column; }
+.itemrow { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.itemname { font-size: 15px; color: #f2f4f8; }
+.itemmeta { font-size: 12px; color: #9aa4b2; margin-top: 2px; }
+.tag {
+  padding-left: 8px; padding-right: 8px; height: 18px; border-radius: 9px;
+  background-color: #1b2735; align-items: center; justify-content: center; margin-left: 8px;
 }
-.hbtn-refresh {
-  background-color: #2f7bd9;
+.tagtext { font-size: 11px; color: #4c9aff; }
+.empty { font-size: 14px; color: #6b7480; padding-top: 12px; }
+.foot {
+  width: 100%; height: 34px; flex-direction: row; align-items: center;
+  padding-left: 16px; padding-right: 16px; background-color: #101215;
+  border-top-width: 1px; border-top-color: #24272e;
 }
-.hbtn-all {
-  background-color: #7a2f2f;
-  width: 130px;
-}
-.hbtn-back {
-  background-color: #333333;
-}
-.hbtn-text {
-  font-size: 18px;
-  color: #ffffff;
-}
-.inforow {
-  width: 100%;
-  height: 24px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 20px;
-  padding-right: 20px;
-  margin-top: 6px;
-}
-.infolabel {
-  width: 130px;
-  font-size: 15px;
-  color: #888888;
-}
-.infovalue {
-  flex: 1;
-  font-size: 15px;
-  color: #cccccc;
-  lines: 1;
-  text-overflow: ellipsis;
-}
-.countwrap {
-  position: absolute;
-  right: 20px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.countdot {
-  width: 10px;
-  height: 10px;
-  border-radius: 5px;
-  background-color: #37c2a0;
-  margin-right: 6px;
-}
-.infocount {
-  font-size: 15px;
-  color: #37c2a0;
-  text-align: right;
-}
-.devscroll {
-  width: 100%;
-  height: 136px;
-  padding-left: 16px;
-  padding-right: 16px;
-  padding-top: 6px;
-}
-
-/* 注意: 横条屏可用高度只有 266px, 这里用两行紧凑布局而非卡片 */
-.devitem {
-  width: 100%;
-  height: 48px;
-  background-color: #141414;
-  border-radius: 10px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 12px;
-  padding-right: 10px;
-  margin-bottom: 8px;
-}
-.devitem-self {
-  background-color: #1e2a3a;
-}
-.devmain {
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-}
-.devname {
-  font-size: 19px;
-  color: #ffffff;
-  lines: 1;
-  text-overflow: ellipsis;
-  height: 24px;
-}
-.devmeta {
-  font-size: 13px;
-  color: #888888;
-  lines: 1;
-  text-overflow: ellipsis;
-  height: 17px;
-}
-.devtag {
-  width: 62px;
-  height: 24px;
-  border-radius: 12px;
-  background-color: #143326;
-  align-items: center;
-  justify-content: center;
-  margin-right: 8px;
-}
-.devtag-text {
-  font-size: 14px;
-  color: #6fe3c0;
-}
-.devbtn {
-  width: 96px;
-  height: 32px;
-  border-radius: 8px;
-  background-color: #7a2f2f;
-  align-items: center;
-  justify-content: center;
-}
-.devbtn-busy {
-  background-color: #332020;
-}
-.devbtn-text {
-  font-size: 17px;
-  color: #ffffff;
-}
-.devempty {
-  font-size: 17px;
-  color: #555555;
-  margin-top: 20px;
-  text-align: center;
-}
-.msgrow {
-  width: 100%;
-  flex: 1;
-  background-color: #000000;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  padding-left: 20px;
-  padding-right: 20px;
-}
-.msgbar {
-  width: 4px;
-  height: 36px;
-  border-radius: 2px;
-  margin-right: 12px;
-}
-.msgbar-error {
-  background-color: #ff6b6b;
-}
-.msgbar-warn {
-  background-color: #ffb648;
-}
-.msgbar-info {
-  background-color: #2f7bd9;
-}
-.msg {
-  font-size: 16px;
-  lines: 2;
-  flex: 1;
-}
-.msg-error {
-  color: #ff7b7b;
-}
-.msg-warn {
-  color: #ffd48a;
-}
-.msg-info {
-  color: #a8c8ee;
-}
-
-/* 确认弹层 */
+.dot { width: 7px; height: 7px; border-radius: 4px; margin-right: 8px; background-color: #6b7480; }
+.dot.info { background-color: #4c9aff; }
+.dot.warn { background-color: #ffb020; }
+.dot.error { background-color: #e5484d; }
+.foottext { font-size: 13px; color: #9aa4b2; flex: 1; }
+.foottext.warn { color: #ffb020; }
+.foottext.error { color: #ff8a8d; }
 .mask {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  align-items: center;
-  justify-content: center;
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.62); align-items: center; justify-content: center;
 }
 .dialog {
-  flex: 1;
-  background-color: #1a1a1a;
-  border-radius: 12px;
-  padding: 18px;
-  flex-direction: column;
-  align-items: center;
+  width: 66%; max-width: 520px; background-color: #14161a; border-radius: 10px;
+  padding: 12px 14px; flex-direction: column;
 }
-.dlgtitle {
-  font-size: 19px;
-  color: #ffffff;
-  font-weight: bold;
-}
-.dlgdivider {
-  flex: 1;
-  height: 1px;
-  background-color: #222222;
-  margin-top: 12px;
-}
-.dlgtext {
-  font-size: 20px;
-  color: #ffffff;
-  lines: 2;
-  text-align: center;
-  margin-top: 14px;
-  margin-bottom: 14px;
-}
-.dlgbtns {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.dlgbtn {
-  width: 150px;
-  height: 40px;
-  border-radius: 8px;
-  align-items: center;
-  justify-content: center;
-  margin-left: 10px;
-  margin-right: 10px;
-}
-.dlgbtn-cancel {
-  background-color: #333333;
-}
-.dlgbtn-ok {
-  background-color: #7a2f2f;
-}
-.dlgbtn-text {
-  font-size: 19px;
-  color: #ffffff;
-}
+.dlgtitle { font-size: 17px; color: #f2f4f8; font-weight: bold; margin-bottom: 6px; }
+.dlgtext { font-size: 14px; color: #d7dce4; margin-bottom: 12px; }
+.dlgbtns { flex-direction: row; justify-content: flex-end; flex-wrap: wrap; }
 </style>
+
