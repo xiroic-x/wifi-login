@@ -7,7 +7,7 @@
  * 失败项与降级项都会写进日志与检测页, 便于按机型定位。
  */
 import { readState, writeState } from './store.js'
-import { request } from './net.js'
+import { request, describeTransport } from './net.js'
 
 var _cache = null
 
@@ -42,14 +42,20 @@ export async function checkCompat(opts) {
   out.details.pageBase = hasPage ? 'ok' : 'fallback'
   if (!hasPage) out.degraded.push('页面基类缺失(已用兜底)')
 
-  /* 3) 原生扩展(自研库): 缺失时走 JSAPI 探测链, 记降级 */
-  var hasNative = false
+  /*
+   * 3) 传输通道: 原生扩展以 ES 模块注册(import { Panet } from "panet"), 不会挂到
+   * globalThis 或 $falcon.jsapi 上 —— 所以不能用"全局有没有 panet"判断，只能看平台层
+   * 自报的实际传输通道；通道为空才说明该固件连网络能力都没探到。
+   */
+  var chan = ''
   try {
-    var j = globalThis.$falcon && globalThis.$falcon.jsapi
-    hasNative = !!((j && j.panet) || globalThis.panet)
-  } catch (e3) {}
-  out.details.native = hasNative ? 'ok' : 'none'
-  if (!hasNative) out.degraded.push('原生扩展未加载(已用固件 JSAPI)')
+    chan = describeTransport() || ''
+  } catch (e3) {
+    chan = ''
+  }
+  out.details.native = chan || 'none'
+  if (!chan) out.degraded.push('未探测到任何传输通道')
+  else if (chan.indexOf('panet') < 0) out.degraded.push('原生扩展未加载(已用固件 JSAPI)')
 
   /* 4) 网络: 不通多半是没连上 WiFi, 不是不兼容 */
   if (o.skipNet !== true) {
