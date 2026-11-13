@@ -43,6 +43,11 @@
       </div>
 
       <!-- 自检 -->
+      <text class="section">兼容性</text>
+      <div class="kv" v-for="(s, i) in compatRows" :key="'c' + i">
+        <text class="k">{{ s.k }}</text>
+        <text class="v">{{ s.v }}</text>
+      </div>
       <text class="section">自检</text>
       <div class="kv" v-for="(s, i) in selfRows" :key="'x' + i">
         <text class="k">{{ s.k }}</text>
@@ -62,6 +67,7 @@ import { readState, writeState, loadAccount, migrateLegacy } from '../../service
 import { request } from '../../services/net.js'
 import { APP_VERSION } from '../../services/version.js'
 import { log } from '../../services/logger.js'
+import { checkCompat, compatLine } from '../../services/compat.js'
 
 export default {
   name: 'diag',
@@ -75,6 +81,7 @@ export default {
       runtime: [],
       native: [],
       selfRows: [],
+      compatRows: [],
       lines: [],
     }
   },
@@ -151,7 +158,15 @@ export default {
           { k: '账号', v: sh.account },
           { k: '旧数据迁移', v: sh.migrate },
         ]
+        var comp = await checkCompat({ skipNet: true })
+        self.compatRows = [
+          { k: '判定', v: compatLine(comp) },
+          { k: '存储往返', v: comp.details.storage },
+          { k: '页面基类', v: comp.details.pageBase },
+          { k: '原生扩展', v: comp.details.native },
+        ]
         self.lines = reportLines(rep)
+        self.lines.push('兼容性: ' + compatLine(comp))
         log('检测页', self.lines.join(' | ').slice(0, 700))
         self.tsText = self._fmtTs(rep.ts)
       } catch (e) {

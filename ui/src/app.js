@@ -1,5 +1,6 @@
 import { BasePage } from './base-page.js'
 import { log, initLog } from './services/logger.js'
+import { checkCompat } from './services/compat.js'
 
 /* 设计基准宽度: 仅当固件没给逻辑宽度时兜底 (有道词典笔 melon_pro 960x266) */
 const DESIGN_WIDTH = 960
@@ -36,6 +37,13 @@ class App extends FalconAppBase {
     try {
       var f = typeof $falcon !== 'undefined' ? $falcon : null
       var j = f && f.jsapi ? f.jsapi : null
+      /* 兼容性检测: 存储/页面基类/原生扩展/网络逐项真调用, 结果写日志供按机型定位 */
+      checkCompat().then(function (c) {
+        log('兼容性', '等级=' + c.level + (c.missing.length ? ' 缺失=' + c.missing.join(';') : '') +
+          (c.degraded.length ? ' 降级=' + c.degraded.join(';') : '') + ' 明细=' + JSON.stringify(c.details))
+      }).catch(function (e) {
+        log('兼容性', '检测异常 ' + (e && e.message ? e.message : e))
+      })
       log('环境', 'vw=' + vw + ' theme=' + ((f && f.env && f.env.custom && f.env.custom.theme) || '-') + ' App=' + (f && typeof f.App) + ' Page=' + (f && typeof f.Page)
         + ' jsapi=' + (typeof j)
         + ' storage=' + (j && typeof j.storage)

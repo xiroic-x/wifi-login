@@ -7,6 +7,8 @@ dl/
 *.png
 # 真机界面截图 (README 展示用)
 !screenshots/*.png
+# 官网静态资源里的图片 (业务图片默认不提交, 这里开例外)
+!site/assets/img/*.png
 
 out/
 *.log

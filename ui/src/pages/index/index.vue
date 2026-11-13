@@ -42,7 +42,11 @@
           <text class="infolabel">连通性测试</text>
           <text class="infovalue">{{ probeName }}</text>
         </div>
-        <div class="inforow" v-if="serverShow">
+        <div class="inforow" v-if="compatWarn">
+        <text class="infolabel">兼容性</text>
+        <text class="infovalue compatwarn">{{ compatWarn }}</text>
+      </div>
+      <div class="inforow" v-if="serverShow">
           <text class="infolabel">认证服务器</text>
           <text class="infovalue">{{ serverShow }}</text>
         </div>
@@ -124,6 +128,7 @@
 import { checkPortal } from '../../services/detect.js'
 import { all as allAdapters, byId, detectAdapter } from '../../services/portal-adapters/registry.js'
 import { loadAccount, saveAccount } from '../../services/store.js'
+import { getCompat, compatLine } from '../../services/compat.js'
 import { wifiSsid, writeStatusFile } from '../../services/net.js'
 import { confirmServerUsable } from '../../services/server-probe.js'
 import { log, initLog } from '../../services/logger.js'
@@ -156,9 +161,11 @@ export default {
       ssid: '',
       /* 本次新输入的密码短暂明文显示, 记住的密码始终只显示掩码 */
       pwdRevealed: false,
-      remember: false,
+      remember: true,
       logging: false,
       checking: false,
+      /* 兼容性提示(启动检测结果, 降级/不兼容时显示) */
+      compatWarn: '',
       /* 自动检测节流窗口(ms): 期间的 onShow 不再触发新检测 */
       _lastCheckAt: 0,
       canLogout: false,
@@ -186,6 +193,9 @@ export default {
   },
   methods: {
     onShow() {
+      /* 兼容性: 启动检测已在 app.js 跑过, 这里只取结果; 未出结果就不显示 */
+      var c0 = getCompat()
+      this.compatWarn = c0 && c0.level !== 'ok' ? compatLine(c0) : ''
       if (this._started) {
         // 系统输入法面板弹出/收起会让本页 onHide/onShow 一轮;
         // 输入会话中及刚关闭的短暂窗口内不做自动刷新, 否则会把登录表单冲掉
@@ -992,12 +1002,12 @@ export default {
       this.saveServer(base)
       this.startPortalConf(adapter, base, this._params || {}, gen)
     },
-    saveServer(base) {
+    async saveServer(base) {
       var self = this
-      loadAccount(self._ssid).then(function (acc) {
-        acc.serverBase = base
-        saveAccount(acc, self._ssid)
-      })
+      var acc = await loadAccount(self._ssid)
+      acc.serverBase = base
+      var ok = await saveAccount(acc, self._ssid)
+      log('配置', '保存认证服务器 wifi=' + (self._ssid || '未知') + ' ok=' + ok)
     },
     toggleRemember() {
       this.remember = !this.remember
@@ -1049,27 +1059,28 @@ export default {
       }
       // 登录成功 → 保存凭据 (按当前 WiFi 分别存储, 记住所用适配器) → 复查连通性确认放行
       var ssidKey = await this.resolveSsid()
+      /* 保存必须 await 并回读校验: 之前是即发即忘, 登录后页面很快重建, 写入可能丢失 */
       if (this.remember) {
-        saveAccount(
-          {
-            username: this.username,
-            password: this.password,
-            remember: true,
-            serverBase: this.serverBase,
-            adapter: adapter.id,
-          },
-          ssidKey
-        )
-        log('配置', '已记住账号 (wifi=' + (ssidKey || '未知') + ' adapter=' + adapter.id + ')')
+        var saved = await saveAccount({
+          username: this.username,
+          password: this.password,
+          remember: true,
+          serverBase: this.serverBase,
+          adapter: adapter.id,
+        }, ssidKey)
+        var back = await loadAccount(ssidKey)
+        var okSave = !!(saved && back && back.password === this.password && back.username === this.username)
+        log('配置', '已记住账号 (wifi=' + (ssidKey || '未知') + ' adapter=' + adapter.id +
+          ' 密码长度=' + String(this.password || '').length + ' 回读校验=' + (okSave ? '通过' : '失败') + ')')
       } else {
-        loadAccount(ssidKey).then(function (acc) {
-          acc.username = self.username
-          acc.password = ''
-          acc.remember = false
-          acc.serverBase = self.serverBase
-          acc.adapter = adapter.id
-          saveAccount(acc, ssidKey)
-        })
+        var acc0 = await loadAccount(ssidKey)
+        acc0.username = this.username
+        acc0.password = ''
+        acc0.remember = false
+        acc0.serverBase = this.serverBase
+        acc0.adapter = adapter.id
+        await saveAccount(acc0, ssidKey)
+        log('配置', '仅记住账号(未勾选记住密码) wifi=' + (ssidKey || '未知'))
       }
       this.verifyOnline(gen)
     },
@@ -1127,16 +1138,17 @@ export default {
 
 <style>
 .wrapper {
-  width: 960px;
-  height: 266px;
+  width: 100%;
+  height: 100%;
   background-color: #000000;
   flex-direction: column;
 }
 .headbar {
-  width: 960px;
+  width: 100%;
   height: 44px;
   background-color: #141414;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding-left: 20px;
@@ -1144,6 +1156,7 @@ export default {
 }
 .titlerow {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .logo {
@@ -1167,6 +1180,7 @@ export default {
 }
 .headbtns {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .headbtn {
@@ -1187,25 +1201,27 @@ export default {
   color: #ffffff;
 }
 .divider {
-  width: 960px;
+  width: 100%;
   height: 1px;
   background-color: #222222;
 }
 .statusarea {
-  width: 960px;
+  width: 100%;
   height: 100px;
   background-color: #000000;
   flex-direction: row;
+  flex-wrap: wrap;
   padding-left: 20px;
   padding-right: 20px;
 }
 .statusmain {
-  width: 360px;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
 }
 .statusline {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .statusdot {
@@ -1250,13 +1266,14 @@ export default {
   color: #8fb7e8;
 }
 .statusinfo {
-  width: 560px;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
 }
 .inforow {
   height: 20px;
   flex-direction: row;
+  flex-wrap: wrap;
   margin-top: 2px;
 }
 .infolabel {
@@ -1265,33 +1282,35 @@ export default {
   color: #888888;
 }
 .infovalue {
-  width: 460px;
+  flex: 1;
   font-size: 14px;
   color: #cccccc;
   lines: 1;
   text-overflow: ellipsis;
 }
 .formrow {
-  width: 960px;
+  width: 100%;
   height: 60px;
   background-color: #141414;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 16px;
   padding-right: 16px;
 }
 .field {
-  width: 270px;
+  flex: 1;
   height: 42px;
   background-color: #1a1a1a;
   border-radius: 8px;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 12px;
   margin-right: 12px;
 }
 .field-wide {
-  width: 560px;
+  flex: 1;
 }
 .fieldlabel {
   width: 52px;
@@ -1306,7 +1325,7 @@ export default {
   text-overflow: ellipsis;
 }
 .fieldvalue-wide {
-  width: 480px;
+  flex: 1;
   font-size: 18px;
   color: #ffffff;
   lines: 1;
@@ -1342,6 +1361,7 @@ export default {
   width: 120px;
   height: 42px;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   margin-right: 10px;
 }
@@ -1385,10 +1405,11 @@ export default {
   font-weight: normal;
 }
 .msgrow {
-  width: 960px;
+  width: 100%;
   flex: 1;
   background-color: #000000;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -1422,4 +1443,8 @@ export default {
 .msg-info {
   color: #a8c8ee;
 }
+.compatwarn {
+  color: #ffb84d;
+}
+
 </style>

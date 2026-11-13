@@ -58,13 +58,13 @@ export default {
 
 <style>
 .wrapper {
-  width: 960px;
-  height: 266px;
+  width: 100%;
+  height: 100%;
   background-color: #000000;
   flex-direction: column;
 }
 .headbar {
-  width: 960px;
+  width: 100%;
   height: 44px;
   background-color: #141414;
   flex-direction: row;
@@ -95,7 +95,7 @@ export default {
   color: #ffffff;
 }
 .aboutscroll {
-  width: 960px;
+  width: 100%;
   height: 198px;
   padding-left: 20px;
   padding-right: 20px;
@@ -140,7 +140,7 @@ export default {
   color: #8fb7e8;
 }
 .statusbar {
-  width: 960px;
+  width: 100%;
   height: 24px;
   background-color: #141414;
   justify-content: center;

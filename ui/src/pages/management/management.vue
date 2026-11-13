@@ -422,16 +422,17 @@ export default {
 
 <style>
 .wrapper {
-  width: 960px;
-  height: 266px;
+  width: 100%;
+  height: 100%;
   background-color: #000000;
   flex-direction: column;
 }
 .headbar {
-  width: 960px;
+  width: 100%;
   height: 44px;
   background-color: #141414;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding-left: 20px;
@@ -444,6 +445,7 @@ export default {
 }
 .headbtns {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .hbtn {
@@ -470,9 +472,10 @@ export default {
   color: #ffffff;
 }
 .inforow {
-  width: 960px;
+  width: 100%;
   height: 24px;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -484,7 +487,7 @@ export default {
   color: #888888;
 }
 .infovalue {
-  width: 620px;
+  flex: 1;
   font-size: 15px;
   color: #cccccc;
   lines: 1;
@@ -494,6 +497,7 @@ export default {
   position: absolute;
   right: 20px;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .countdot {
@@ -509,7 +513,7 @@ export default {
   text-align: right;
 }
 .devscroll {
-  width: 960px;
+  width: 100%;
   height: 136px;
   padding-left: 16px;
   padding-right: 16px;
@@ -518,11 +522,12 @@ export default {
 
 /* 注意: 横条屏可用高度只有 266px, 这里用两行紧凑布局而非卡片 */
 .devitem {
-  width: 928px;
+  width: 100%;
   height: 48px;
   background-color: #141414;
   border-radius: 10px;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 12px;
   padding-right: 10px;
@@ -532,7 +537,7 @@ export default {
   background-color: #1e2a3a;
 }
 .devmain {
-  width: 640px;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
 }
@@ -585,10 +590,11 @@ export default {
   text-align: center;
 }
 .msgrow {
-  width: 960px;
+  width: 100%;
   flex: 1;
   background-color: #000000;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -628,14 +634,14 @@ export default {
   position: absolute;
   left: 0;
   top: 0;
-  width: 960px;
-  height: 266px;
+  width: 100%;
+  height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
   align-items: center;
   justify-content: center;
 }
 .dialog {
-  width: 520px;
+  flex: 1;
   background-color: #1a1a1a;
   border-radius: 12px;
   padding: 18px;
@@ -648,7 +654,7 @@ export default {
   font-weight: bold;
 }
 .dlgdivider {
-  width: 484px;
+  flex: 1;
   height: 1px;
   background-color: #222222;
   margin-top: 12px;
@@ -663,6 +669,7 @@ export default {
 }
 .dlgbtns {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
 }
 .dlgbtn {
