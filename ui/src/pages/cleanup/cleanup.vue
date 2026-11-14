@@ -39,7 +39,7 @@ import { clearAllAccounts } from '../../services/store.js'
 import { log } from '../../services/logger.js'
 
 export default {
-  name: 'cleanup',
+  name: 'cleanUp',
   data() {
     return { busy: false, result: '' }
   },

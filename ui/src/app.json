@@ -6,7 +6,7 @@
     "cleanup": "pages/cleanup/cleanup.vue",
     "migrated": "pages/migrated/migrated.vue",
     "about": "pages/about/about.vue",
-    "cleanUp": "pages/cleanup/cleanup.vue"
+    "cleanUp": "pages/cleanUp/cleanUp.vue"
   },
   "options": {
     "style": {}
