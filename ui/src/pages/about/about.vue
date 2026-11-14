@@ -21,11 +21,11 @@
       <text class="row">· 内置 Panabit 与 H3C iMC 适配器，更多认证系统见 ADAPTER.md</text>
 
       <text class="section">开源</text>
-      <text class="row coderow" @click="openRepo">https://github.com/xiroic-x/wifi-login</text>
+      <text class="row coderow" @click="qrKind = 'gh'">https://github.com/xiroic-x/wifi-login</text>
       <text class="row">· 许可：框架 GPLv3 / 适配器与平台层 MIT（分层许可）</text>
 
       <text class="section">用户群</text>
-      <div class="qqrow" @click="showQr = true">
+      <div class="qqrow" @click="qrKind = 'qq'">
         <div class="qqbadge"><text class="qqbadge-text">QQ</text></div>
         <div class="qqtexts">
           <text class="qqnum">QQ 群：1132515689</text>
@@ -47,13 +47,13 @@
     </div>
 
     <!-- 二维码弹层：点击遮罩关闭 -->
-    <div class="qrmask" v-if="showQr" @click="showQr = false">
+    <div class="qrmask" v-if="qrKind" @click="qrKind = ''">
       <div class="qrcard" @click="noop">
-        <text class="qrtitle">扫码加入 WiFi-login 用户群</text>
-        <image class="qrimg" :src="qrImage"></image>
-        <text class="qrnum">QQ 群号：1132515689</text>
-        <text class="qrtip">用手机 QQ「扫一扫」识别上方二维码</text>
-        <div class="qrdone" @click="showQr = false">
+        <text class="qrtitle">{{ qrTitle }}</text>
+        <image class="qrimg" :src="qrSrc"></image>
+        <text class="qrnum">{{ qrSub }}</text>
+        <text class="qrtip">{{ qrTip }}</text>
+        <div class="qrdone" @click="qrKind = ''">
           <text class="qrdone-text">关闭</text>
         </div>
       </div>
@@ -63,7 +63,7 @@
 
 <script>
 import { APP_VERSION, APP_ID } from '../../services/version.js'
-import { QQ_QR_IMAGE } from '../../services/qq-qr.js'
+import { QQ_QR_IMAGE, GH_QR_IMAGE } from '../../services/qq-qr.js'
 
 const REPO_URL = 'https://github.com/xiroic-x/wifi-login'
 const QQ_GROUP = '1132515689'
@@ -75,11 +75,18 @@ export default {
     return {
       version: APP_VERSION,
       appid: APP_ID,
-      showQr: false,
-      qrImage: QQ_QR_IMAGE,
+      /* 二维码弹层: '' 关闭, 'qq' 用户群, 'gh' 仓库 */
+      qrKind: '',
+
       repoUrl: REPO_URL,
       qqGroup: QQ_GROUP,
     }
+  },
+  computed: {
+    qrSrc() { return this.qrKind === 'gh' ? GH_QR_IMAGE : QQ_QR_IMAGE },
+    qrTitle() { return this.qrKind === 'gh' ? '扫码打开 GitHub 仓库' : '扫码加入 WiFi-login 用户群' },
+    qrSub() { return this.qrKind === 'gh' ? 'github.com/xiroic-x/wifi-login' : 'QQ 群号：1132515689' },
+    qrTip() { return this.qrKind === 'gh' ? '手机扫码打开仓库，查看源码与更新' : '用手机 QQ「扫一扫」识别二维码' },
   },
   methods: {
     onShow() {},
@@ -88,7 +95,7 @@ export default {
     noop() {},
     goBack() { this.$page.finish() },
     /* 打开仓库：优先用系统浏览器能力，没有就退化为复制/提示 */
-    openRepo() {
+    openRepoUnused() {
       try {
         if (typeof $falcon !== 'undefined' && $falcon.jsapi && $falcon.jsapi.system && $falcon.jsapi.system.openUrl) {
           $falcon.jsapi.system.openUrl({ url: REPO_URL })
@@ -225,7 +232,7 @@ export default {
   align-items: center;
 }
 .qrtitle { font-size: 15px; color: #ffffff; font-weight: bold; margin-bottom: 4px; }
-.qrimg { width: 108px; height: 108px; border-radius: 6px; }
+.qrimg { width: 140px; height: 140px; border-radius: 4px; }
 .qrnum { font-size: 15px; color: #6ec1ff; margin-top: 4px; }
 .qrtip { font-size: 12px; color: #9aa4b2; margin-top: 1px; }
 .qrdone {
