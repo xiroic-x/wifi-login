@@ -1,5 +1,7 @@
 # Panabit Portal API
 
+> 返回 [README](../README.md) · 文档索引 [docs/README.md](README.md)
+
 > 返回 [README](../README.md)
 
 以下协议由内置的 **Panabit 适配器** (`ui/src/services/portal-adapters/panabit.js`)

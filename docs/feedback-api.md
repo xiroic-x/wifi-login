@@ -1,5 +1,7 @@
 # BUG 反馈接口契约 (v1) — wifi-login 官网 + 反馈服务
 
+> 返回 [README](../README.md) · 文档索引 [docs/README.md](README.md)
+
 > 本文是**接口唯一事实来源**。官网前端 (`site/`)、反馈服务 (`server/`)、
 > 客户端 (`site/clients/`)、AI skill (`skills/wifi-bug-report/`) 全部按本文实现。
 > 变更接口必须先改本文。

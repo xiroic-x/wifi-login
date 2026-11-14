@@ -1,4 +1,6 @@
 ---
+
+> 返回 [README](README.md) · 文档索引 [docs/README.md](docs/README.md)
 name: wifi-portal-adapter
 description: 为 WiFi 认证小程序 (wifi-login 仓库) 制作新的 Portal 适配器模块, 适配新的 WiFi 登入页面/认证系统。覆盖从网站分析到模块注册的全流程: 询问前端代码获取来源 (本地文件/浏览器)、探查设备加密能力 (不支持则告知无法制作)、分析认证协议、识别阻塞情形 (代码加密/验证码/后端绑定验证)、实现与注册适配器、真机验证。当用户要适配新的认证页、新的 Portal、其他厂商认证系统时使用。
 ---
@@ -17,7 +19,7 @@ description: 为 WiFi 认证小程序 (wifi-login 仓库) 制作新的 Portal �
 - `ui/src/services/portal-adapters/panabit.js` — 默认适配器（演示模板）
 - `ui/src/services/aes.js` — 框架内置加密能力（当前仅 AES-128-ECB/ZeroPadding）
 - `ui/src/services/detect.js` — 检测结果字段（适配器 match 的 ctx 来源）
-- 设备画像与真机命令见相关设备 profile / 交接文档（960×266 横条屏, QuickJS 运行时）
+- 设备画像与真机命令见相关设备 profile / 交接文档（横条屏(逻辑宽度取固件配置), QuickJS 运行时）
 
 ## 核心流程（按顺序，不得跳步）
 

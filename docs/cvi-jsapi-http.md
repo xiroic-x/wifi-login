@@ -1,5 +1,7 @@
 # CVI 机型 `$falcon.jsapi.http` 实测记录
 
+> 返回 [README](../README.md) · 文档索引 [docs/README.md](README.md)
+
 > 设备：有道词典笔 CVI 机型（`平台=Linux`，`系统版本=1.6.3`，`API 版本=1`，`设备型号=IoT Miniapp`，
 > `机型族(主题)=theme-y02-1`，逻辑/物理屏 `936×280`）
 > 日期：2026-11-13

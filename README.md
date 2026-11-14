@@ -259,16 +259,16 @@ QQ 群号：**1132515689** · [点击加入群聊【WiFi-login用户群】](http
 
 ## 📚 文档导航
 
+完整文档索引见 **[docs/README.md](docs/README.md)**（按用途与问题分类）。
+
 | 文档 | 内容 |
 | --- | --- |
-| [ADAPTER.md](ADAPTER.md) | 适配器模块开发指南：接口契约 + 从登录页提取协议 + 全流程 |
-| [SKILL.md](SKILL.md) | 配套 skill：从网站分析到做出适配器的流程要求 |
-| [docs/external-api.md](docs/external-api.md) | 外部小程序调用、设备管理页拉起、`status.json`、日志 |
-| [docs/panabit-api.md](docs/panabit-api.md) | Panabit Portal API（端点 / 参数 / 返回码 / 密码加密） |
-| [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md) | H3C iMC Portal 认证取证（端点 / 参数 / 返回码 / 心跳 / 真机实验） |
-| [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md) | CVI 固件 `$falcon.jsapi.http` 实测记录（签名 / 返回形态 / 排障） |
-| [docs/project.md](docs/project.md) | 工程结构、构建（CI 与本地）、版本与产物命名 |
-| [CHANGELOG.md](CHANGELOG.md) | 更新日志（CI 发版时按版本抽取为 Release Notes） |
+| [ADAPTER.md](ADAPTER.md) | 适配器接口契约与开发全流程 |
+| [docs/project.md](docs/project.md) | 工程结构、构建、测试、发版 |
+| [docs/external-api.md](docs/external-api.md) | 外部调用、回调字段、日志标签 |
+| [docs/panabit-api.md](docs/panabit-api.md) · [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md) | 两种 Portal 协议 |
+| [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md) | 32 位固件 JSAPI 实测 |
+| [CHANGELOG.md](CHANGELOG.md) | 逐版本变更 |
 
 ## 🤝 反馈与贡献
 

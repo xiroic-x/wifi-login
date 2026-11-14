@@ -1,5 +1,7 @@
 # Portal 适配器模块开发指南
 
+> 返回 [README](README.md) · 文档索引 [docs/README.md](docs/README.md)
+
 本体 (index/management 页) 是一个**认证框架**: 连通性检测、认证页类型自动识别、
 适配器注册表、UI、账号存储、日志都是通用的; 具体的认证协议 (获取配置/登录/
 状态心跳/下线/设备管理) 由 `ui/src/services/portal-adapters/` 下的
@@ -68,7 +70,7 @@
 
 - 连上目标 WiFi 后浏览器访问任意 **HTTP** 站点 (不要用 HTTPS), 被强制门户劫持
   后的地址栏 URL 就是认证页; 记下它 (含 `?wlanuserip=...` 等查询参数)。
-- 词典笔上也可读 `/userdisk/xiro/status.json` 或日志里的 `portalPage` 字段拿跳转 URL。
+- 词典笔上也可读 `$dataDir/status.json` 或日志里的 `portalPage` 字段拿跳转 URL。
 - 管理页地址通常在登录成功后的跳转链接、页面里的"设备管理/在线终端"入口、
   或同服务器的 `/ucenter`、`/manage` 等路径; 需要凭据登录后才能打开的, 先登录再提取。
 
