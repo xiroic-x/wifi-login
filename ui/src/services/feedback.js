@@ -205,11 +205,12 @@ export async function submitFeedback(payload) {
   var url = FEEDBACK_BASE + '/api/v1/feedback'
   var res = null
   try {
-    /* request 只接受对象参数 { url, method, timeout, body, headers, maxBytes } */
+    /* request 只接受对象参数 { url, method, timeout, body, headers, maxBytes }
+     * timeout 取 40s: 上传整份日志(几十 KB)比普通探测慢得多(原生上限 60s) */
     res = await request({
       url: url,
       method: 'POST',
-      timeout: 20,
+      timeout: 40,
       body: body,
       headers: { 'Content-Type': 'application/json' },
       maxBytes: 8192
@@ -229,7 +230,7 @@ export async function submitFeedback(payload) {
       var res2 = await request({
         url: httpUrl,
         method: 'POST',
-        timeout: 20,
+        timeout: 40,
         body: body,
         headers: { 'Content-Type': 'application/json' },
         maxBytes: 8192
