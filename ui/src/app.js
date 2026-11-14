@@ -1,6 +1,7 @@
 import { BasePage } from './base-page.js'
 import { log, initLog } from './services/logger.js'
 import { checkCompat } from './services/compat.js'
+import { systemInfo } from './services/net.js'
 
 /* 设计基准宽度: 仅当固件没给逻辑宽度时兜底 (有道词典笔 melon_pro 960x266) */
 const DESIGN_WIDTH = 960
@@ -44,6 +45,13 @@ class App extends FalconAppBase {
       }).catch(function (e) {
         log('兼容性', '检测异常 ' + (e && e.message ? e.message : e))
       })
+      /* 真实系统信息: 由平台层读取(os-release/device-tree/固件接口), env 里的是框架版本 */
+      systemInfo().then(function (si) {
+        if (si && (si.osPretty || si.osName)) {
+          log('环境', '真实系统=' + (si.osPretty || si.osName) + ' ' + (si.osVersionId || '') +
+            ' 内核=' + (si.kernelVersion || '-') + ' 架构=' + (si.arch || '-') + ' 板型=' + (si.boardModel || '-'))
+        }
+      }).catch(function () {})
       log('环境', 'vw=' + vw + ' theme=' + ((f && f.env && f.env.custom && f.env.custom.theme) || '-') + ' App=' + (f && typeof f.App) + ' Page=' + (f && typeof f.Page)
         + ' jsapi=' + (typeof j)
         + ' storage=' + (j && typeof j.storage)

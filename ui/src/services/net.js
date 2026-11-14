@@ -58,6 +58,26 @@ function b64ToBytes(b64) {
  * 供日志与兼容性检测使用: 原生扩展以 ES 模块注册, 不在 globalThis 上,
  * 只能由平台层自报 —— CVI 平台层同样导出本函数(报告固件 JSAPI 通道)。
  */
+
+/*
+ * 真实系统信息(原生读取 /etc/os-release、/proc/version、device-tree、/proc/cpuinfo)。
+ * 页面要显示的"系统版本 / 设备型号"只能是这里的值: $falcon.env 里的是小程序框架版本。
+ * 返回对象; 原生方法缺失或失败时返回 null, 由上层自行降级展示。
+ */
+export async function systemInfo() {
+  try {
+    var c = client()
+    if (!c || typeof c.systemInfo !== 'function') return null
+    var raw = await c.systemInfo()
+    if (!raw) return null
+    if (typeof raw === 'string') return JSON.parse(raw)
+    return raw
+  } catch (e) {
+    try { log('系统', 'systemInfo 失败 ' + (e && e.message ? e.message : e)) } catch (e2) {}
+    return null
+  }
+}
+
 export function describeTransport() {
   return client() ? 'panet (自研原生库)' : ''
 }

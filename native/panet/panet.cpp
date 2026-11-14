@@ -617,6 +617,125 @@ public:
             info.postError("unknown panet error");
         }
     }
+    /* ---------- 真实系统信息 ----------
+     * $falcon.env 里的 platform / version / deviceModel / apiVersion 是【小程序框架】的
+     * 版本信息(Linux / 1.4.0 / HaaS UI / 1), 不是设备真实系统。页面要显示真实值只能由
+     * 原生层直接读系统文件: /etc/os-release、/proc/version、device-tree model/compatible、
+     * /proc/cpuinfo。全部只读, 不采集序列号 / MAC / 账号 / 位置。
+     */
+
+    // readTextFile(path) -> string (读不到返回空串; 去掉尾部换行与 NUL)
+    static std::string readTextFile(const std::string &path)
+    {
+        FILE *f = fopen(path.c_str(), "rb");
+        if (!f) return std::string();
+        std::string out;
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
+        fclose(f);
+        while (!out.empty()) {
+            char c = out[out.size() - 1];
+            if (c == '\n' || c == '\r' || c == '\0' || c == ' ') out.erase(out.size() - 1);
+            else break;
+        }
+        return out;
+    }
+
+    // kvOf(text, key) -> 值 (同时支持 KEY=value 与 "KEY : value")
+    static std::string kvOf(const std::string &text, const std::string &key)
+    {
+        size_t pos = 0;
+        while (pos < text.size()) {
+            size_t eol = text.find('\n', pos);
+            std::string line = text.substr(pos, eol == std::string::npos ? std::string::npos : eol - pos);
+            size_t eq = line.find_first_of("=:");
+            if (eq != std::string::npos) {
+                std::string k = line.substr(0, eq);
+                size_t a = k.find_first_not_of(" \t");
+                size_t b = k.find_last_not_of(" \t");
+                if (a != std::string::npos && b != std::string::npos) k = k.substr(a, b - a + 1);
+                if (k == key) {
+                    std::string v = line.substr(eq + 1);
+                    size_t va = v.find_first_not_of(" \t");
+                    v = (va == std::string::npos) ? std::string() : v.substr(va);
+                    if (v.size() >= 2 && v[0] == '"' && v[v.size() - 1] == '"') v = v.substr(1, v.size() - 2);
+                    return v;
+                }
+            }
+            if (eol == std::string::npos) break;
+            pos = eol + 1;
+        }
+        return std::string();
+    }
+
+    // JSON 字符串转义 (只用于本方法的键值)
+    static std::string jsonEsc(const std::string &v)
+    {
+        std::string out;
+        out.reserve(v.size() + 8);
+        for (size_t i = 0; i < v.size(); i++) {
+            char c = v[i];
+            if (c == '"' || c == '\\') { out += '\\'; out += c; }
+            else if (c == '\n') out += "\\n";
+            else if (c == '\r') out += "\\r";
+            else if (c == '\t') out += "\\t";
+            else if ((unsigned char)c < 0x20) out += ' ';
+            else out += c;
+        }
+        return out;
+    }
+
+    // systemInfo() -> Promise<string>  (JSON 文本; 与本模块其它方法一样返回 Promise)
+    void systemInfo(JQAsyncInfo &info)
+    {
+        try {
+            std::string osr = readTextFile("/etc/os-release");
+            std::string ver = readTextFile("/proc/version");
+            std::string cpu = readTextFile("/proc/cpuinfo");
+
+            std::string kver;
+            size_t vp = ver.find("version ");
+            if (vp != std::string::npos) {
+                size_t st = vp + 8;
+                size_t sp = ver.find(' ', st);
+                kver = ver.substr(st, sp == std::string::npos ? std::string::npos : sp - st);
+            }
+
+            std::string arch =
+#if defined(__aarch64__)
+                "aarch64";
+#elif defined(__arm__)
+                "arm";
+#elif defined(__riscv)
+                "riscv";
+#elif defined(__x86_64__)
+                "x86_64";
+#else
+                "unknown";
+#endif
+
+            std::string json = "{";
+            json += "\"osName\":\"" + jsonEsc(kvOf(osr, "NAME")) + "\",";
+            json += "\"osVersionId\":\"" + jsonEsc(kvOf(osr, "VERSION_ID")) + "\",";
+            json += "\"osPretty\":\"" + jsonEsc(kvOf(osr, "PRETTY_NAME")) + "\",";
+            json += "\"kernelLine\":\"" + jsonEsc(kvOf(osr, "KERNEL")) + "\",";
+            json += "\"kernelVersion\":\"" + jsonEsc(kver) + "\",";
+            json += "\"arch\":\"" + jsonEsc(arch) + "\",";
+            json += "\"boardModel\":\"" + jsonEsc(readTextFile("/sys/firmware/devicetree/base/model")) + "\",";
+            json += "\"boardCompatible\":\"" + jsonEsc(readTextFile("/sys/firmware/devicetree/base/compatible")) + "\",";
+            json += "\"cpuHardware\":\"" + jsonEsc(kvOf(cpu, "Hardware")) + "\",";
+            json += "\"cpuModel\":\"" + jsonEsc(kvOf(cpu, "model name")) + "\"";
+            json += "}";
+            info.post(json);
+        } catch (const std::exception &e) {
+            info.postError(e.what());
+        } catch (...) {
+            info.postError("unknown panet error");
+        }
+    }
+
+
 
     // wifiSsid() -> Promise<string>  (当前连接的 WiFi 名称; 取不到返回空串)
     // 固件未暴露 SSID 查询 JSAPI, 这里按可靠性依次尝试:
@@ -648,6 +767,7 @@ static JSValue createPanet(JQModuleEnv *env)
         return new Panet();
     });
     tpl->SetProtoMethodPromise("request", &Panet::request);
+    tpl->SetProtoMethodPromise("systemInfo", &Panet::systemInfo);
     tpl->SetProtoMethodPromise("writeFile", &Panet::writeFile);
     tpl->SetProtoMethodPromise("appendFile", &Panet::appendFile);
     tpl->SetProtoMethodPromise("mkdirs", &Panet::mkdirs);

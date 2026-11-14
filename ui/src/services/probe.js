@@ -61,25 +61,41 @@ function jsapi() {
   return safe(function () { return (f && f.jsapi) || null }, null)
 }
 
-/* 系统与运行时: 全部取自固件给的 env */
-export function systemInfo() {
+/*
+ * 系统与设备信息:
+ *   真实值来自平台层 systemInfo() —— RK 由原生读 /etc/os-release + device-tree, CVI 探固件
+ *   systemInfo/getVersion; 探不到的字段如实留空, 不再用框架值冒充系统/型号。
+ *   $falcon.env 里的 platform/version/deviceModel/apiVersion 属于【小程序框架】, 单独一组。
+ */
+export function frameworkInfo() {
   var f = falcon()
   var env = safe(function () { return f.env || null }, null)
   var custom = safe(function () { return (env && env.custom) || null }, null)
   return {
-    platform: safe(function () { return env.platform }, '-'),
-    osVersion: safe(function () { return env.version }, '-'),
+    runtimePlatform: safe(function () { return env.platform }, '-'),
+    runtimeVersion: safe(function () { return env.version }, '-'),
     apiVersion: safe(function () { return String(env.apiVersion) }, '-'),
-    deviceModel: safe(function () { return env.deviceModel }, '-'),
+    frameworkModel: safe(function () { return env.deviceModel }, '-'),
     theme: safe(function () { return custom && custom.theme }, '-'),
     width: safe(function () { return String(env.currentScreenWidth || (custom && custom.currentScreenWidth)) }, '-'),
     height: safe(function () { return String(env.currentScreenHeight || (custom && custom.currentScreenHeight)) }, '-'),
     deviceWidth: safe(function () { return String(env.deviceWidth) }, '-'),
     deviceHeight: safe(function () { return String(env.deviceHeight) }, '-'),
-    logLevel: safe(function () { return env.logLevel }, '-'),
     ssid: safe(function () { return envSsid() }, '') || '-'
   }
 }
+
+/* 采集真实系统信息: 平台层没实现/失败时返回空对象, 由页面显示「-」 */
+export async function realSystemInfo(getter) {
+  try {
+    if (typeof getter === 'function') {
+      var r = await getter()
+      if (r && typeof r === 'object') return r
+    }
+  } catch (e) {}
+  return {}
+}
+
 
 export function jsapiModules() {
   var j = jsapi()
@@ -136,10 +152,13 @@ export async function selfCheck(deps) {
 }
 
 export async function collectReport(deps) {
+  var d = deps || {}
   var mods = jsapiModules()
+  var real = await realSystemInfo(d.systemInfo)
   return {
     ts: Date.now(),
-    system: systemInfo(),
+    system: frameworkInfo(),
+    real: real,
     registered: mods.registered,
     probed: mods.probed,
     native: nativeModules(),
@@ -152,10 +171,13 @@ export function reportLines(rep) {
   var L = []
   if (!rep) return L
   var s = rep.system || {}
-  L.push('平台=' + s.platform + ' 系统=' + s.osVersion + ' api=' + s.apiVersion)
-  L.push('设备=' + s.deviceModel + ' 主题=' + s.theme + ' 逻辑屏=' + s.width + 'x' + s.height)
-  L.push('物理=' + s.deviceWidth + 'x' + s.deviceHeight + ' 网络=' + s.ssid)
-  L.push('已注册模块=' + (rep.registered || []).join(','))
+  var s = rep.system || {}
+  L.push('系统=' + (r.osPretty || r.osName || '-') + (r.osVersionId ? ' ' + r.osVersionId : '')
+    + ' 内核=' + (r.kernelVersion || '-') + ' 架构=' + (r.arch || '-'))
+  L.push('板型=' + (r.boardModel || '-') + (r.cpuHardware ? ' SoC=' + r.cpuHardware : ''))
+  L.push('框架=' + s.runtimePlatform + ' / ' + s.runtimeVersion + ' / api ' + s.apiVersion + ' / ' + s.frameworkModel)
+  L.push('机型族=' + s.theme + ' 逻辑屏=' + s.width + 'x' + s.height + ' 物理=' + s.deviceWidth + 'x' + s.deviceHeight + ' 网络=' + s.ssid)
+
   for (var i = 0; i < (rep.probed || []).length; i++) {
     var p = rep.probed[i]
     L.push('  ' + p.name + '(' + p.type + ') ' + (p.methods || []).join(' '))

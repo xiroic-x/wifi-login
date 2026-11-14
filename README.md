@@ -286,32 +286,19 @@ H3C iMC 门户：`1` 成功、`200` 已在线（无需重复登录）；失败�
 - 第三方依赖与资源各有其自带许可，使用时请一并遵守；提交 Issue / PR 即表示同意所贡献内容
   以上述对应许可发布。
 
-## 📚 公开参考项目与资料
+## 📚 本软件使用的项目
 
-协议适配与设备适配过程中参考了以下公开资料与开源实现，在此致谢：
+这个软件本身用到了以下开源项目与工具，在此致谢：
 
-**官方文档 / 厂商知识库**
+| 项目 | 用途 |
+| --- | --- |
+| [aiot-vue-cli](https://www.npmjs.com/package/aiot-vue-cli) | 打包成设备可安装的 `.amr`（Vue 2 单文件组件 → 小程序包） |
+| [Vue 2](https://v2.vuejs.org/) | 页面框架（设备运行时使用 Vue 2 子集） |
+| [Rollup](https://rollupjs.org/) | 模块打包（由 aiot-vue-cli 调用） |
+| [pnpm](https://pnpm.io/) | 依赖安装与工作区 |
+| [GitHub Actions](https://github.com/features/actions) | CI：交叉编译原生库、两个平台分别打包、发布产物 |
+| [crosstool-NG / GNU Toolchain](https://crosstool-ng.github.io/) | `aarch64-none-linux-gnu` 交叉编译工具链（RK 版原生库） |
+| [CMake](https://cmake.org/) | 原生库构建 |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | 开发、审查与自动化验证所用的 harness |
 
-- [H3C Portal 命令参考（EN）](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Wireless/00-Public/Reference_Guides/Command_References/H3C_Access_Controllers_CR-R5456/13/202211/1714837_294551_0.htm)
-- [H3C Portal 命令参考（CN，`url-parameter`）](http://www.h3c.com/cn/d_202212/1742755_30005_0.htm)
-- [H3C KMS：Portal 认证报文 / 端口与 iMC 部署排查](https://kms.h3c.com/questions/dispcont/292878)
-- [H3C KMS：`E63100` 无效认证客户端版本](https://kms.h3c.com/questions/dispcont/292019)
-- [H3C KMS：`E63025` MAC 绑定校验失败](https://kms.h3c.com/questions/dispcont/87474)
-
-**公开实现（H3C iMC Portal 协议交叉验证）**
-
-- 抓包分析与完整参数表：[暨南大学珠海校区有线网认证分析及 Golang 实现](https://0x2a.in/blog/posts/jnu_network/)
-- [Steve0x2a/JNU_ZH_Network](https://github.com/Steve0x2a/JNU_ZH_Network) — Go 实现（登录 / 心跳 / 解码容错 / 已在线处理）
-- [Howard20181/Shell-H3C-Portal](https://github.com/Howard20181/Shell-H3C-Portal) — Shell 实现（最小参数集 / `portalLink` 解码 / 630xx 码表）
-- [Howard20181/Shell-H3C-BYOD](https://github.com/Howard20181/Shell-H3C-BYOD) — 同一 iMC 的 BYOD 协议（对比用）
-- [yaoing/iMC-Tunnel](https://github.com/yaoing/iMC-Tunnel) — Electron 工具（登录 / 下线 / 心跳三接口）
-- [disassembly/H3c_Portal-login-logout](https://github.com/disassembly/H3c_Portal-login-logout) — 老版登录 / 下线脚本
-- [xiyouant/H3C_Auto_regist](https://github.com/xiyouant/H3C_Auto_regist) — 更老版本（`index_default.jsp` 取 Cookie、`pws?t=hd` 心跳）
-
-**设备与调试工具**
-
-- [penosext/dictpen-vm](https://github.com/penosext/dictpen-vm) — 词典笔固件虚拟机框架，用于多机型回归验证
-- [aiot-vue-cli](https://www.npmjs.com/package/aiot-vue-cli) — 有道小程序打包工具
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — 开发与审查流程所用 harness
-
-> 以上为公开可访问的第三方资料；本项目与其无隶属关系，仅作协议取证与实现参考。
+设备侧的运行时由设备固件提供（QuickJS + 厂商 JSAPI / 自研原生库），不属于本仓库依赖。

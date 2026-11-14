@@ -113,6 +113,44 @@ var request = createRequest(async function (ctx) {
   return toRaw(r)
 }, 8)
 
+
+/*
+ * 真实系统信息。CVI 固件没有文件模块, 但 jsapi 里有 systemInfo / getVersion 一类接口;
+ * 逐个探测常见形态, 探到什么返回什么($falcon.env 里的 version/deviceModel 是框架版本, 不用)。
+ * 返回对象(可能为空对象); 完全探不到返回 null。
+ */
+export async function systemInfo() {
+  var j = jsapi()
+  if (!j) return null
+  var out = {}
+  try {
+    var sys = j.system || null
+    if (sys && typeof sys.systemInfo === 'function') {
+      var r = await sys.systemInfo()
+      if (r && typeof r === 'object') out = Object.assign(out, r)
+      else if (typeof r === 'string') {
+        try { out = Object.assign(out, JSON.parse(r)) } catch (e0) { out.raw = r }
+      }
+    }
+  } catch (e) {}
+  try {
+    var sys2 = j.system || null
+    var fnV = (sys2 && sys2.getVersion) || (j.global && j.global.getVersion) || null
+    if (typeof fnV === 'function') {
+      var v = await fnV.call(sys2 || j.global)
+      if (typeof v === 'string') out.firmwareVersion = v
+    }
+  } catch (e2) {}
+  try {
+    /* 内核与架构在同一台机器上是事实, 固件没给就留空 */
+    if (!out.osVersion && j.system && typeof j.system.getOsVersion === 'function') {
+      var ov = await j.system.getOsVersion()
+      if (typeof ov === 'string') out.osVersionId = ov
+    }
+  } catch (e3) {}
+  return Object.keys(out).length ? out : null
+}
+
 export { request, describeErr }
 
 /* 当前生效的传输通道名 (空串 = 该固件不可用), 供日志/状态页展示 */

@@ -15,7 +15,16 @@
         <text class="verdictsub" v-if="verdictSub">{{ verdictSub }}</text>
       </div>
 
-      <text class="section">系统与设备</text>
+      <text class="section">真实系统信息</text>
+      <div class="card">
+        <div class="kv" v-for="(row, i) in realRows" :key="'rs' + i">
+          <text class="k">{{ row.k }}</text>
+          <text class="v">{{ row.v }}</text>
+        </div>
+        <text class="hint" v-if="!realRows.length">该固件未提供系统信息接口，无法读取真实值</text>
+      </div>
+
+      <text class="section">框架与屏幕</text>
       <div class="card">
         <div class="kv" v-for="(row, i) in systemRows" :key="'s' + i">
           <text class="k">{{ row.k }}</text>
@@ -69,10 +78,11 @@
 <script>
 import { collectReport, reportLines } from '../../services/probe.js'
 import { readState, writeState, loadAccount, migrateLegacy } from '../../services/store.js'
-import { request } from '../../services/net.js'
+import { request, systemInfo as platformSystemInfo } from '../../services/net.js'
 import { checkCompat, compatLine } from '../../services/compat.js'
 import { APP_VERSION } from '../../services/version.js'
 import { log } from '../../services/logger.js'
+import { probeVersionApis } from '../../services/versionprobe.js'
 
 export default {
   name: 'diag',
@@ -81,6 +91,7 @@ export default {
       busy: false,
       tsText: '-',
       systemRows: [],
+      realRows: [],
       probed: [],
       moduleCount: 0,
       runtime: [],
@@ -93,7 +104,16 @@ export default {
     }
   },
   methods: {
-    onShow() { this.refresh() },
+    onShow() {
+      var self = this
+      /* 先让界面完成首帧: 重活(网络/存储/迁移)延到下一轮事件循环, 避免进页卡住 */
+      if (this._pending) return
+      this._pending = true
+      setTimeout(function () {
+        self._pending = false
+        self.refresh()
+      }, 60)
+    },
     onHide() {},
     onUnload() {},
     goBack() { this.$page.finish() },
@@ -109,7 +129,9 @@ export default {
       this.busy = true
       var self = this
       try {
+        /* 分两步: 一) 立即拿到系统/框架/模块信息并渲染; 二) 再做自检与兼容性 */
         var rep = await collectReport({
+          systemInfo: platformSystemInfo,
           /* 每项都是真实调用: 存储写读回环、网络实打一次探测源、账号查一次、迁移实跑一次 */
           probeStorage: async function () {
             var stamp = 'p' + Date.now()
@@ -140,11 +162,20 @@ export default {
           },
         })
         var s = rep.system || {}
+        var r = rep.real || {}
+        self.realRows = [
+          { k: '系统', v: (r.osPretty || r.osName || '-') },
+          { k: '系统版本', v: r.osVersionId || r.osVersion || '-' },
+          { k: '内核', v: r.kernelVersion || '-' },
+          { k: '架构', v: r.arch || '-' },
+          { k: '板型', v: r.boardModel || '-' },
+          { k: 'SoC', v: r.cpuHardware || r.boardCompatible || '-' },
+        ]
         self.systemRows = [
-          { k: '平台', v: s.platform },
-          { k: '系统版本', v: s.osVersion },
+          { k: '框架平台', v: s.runtimePlatform },
+          { k: '框架版本', v: s.runtimeVersion },
           { k: 'API 版本', v: s.apiVersion },
-          { k: '设备型号', v: s.deviceModel },
+          { k: '框架型号', v: s.frameworkModel },
           { k: '机型族', v: s.theme },
           { k: '逻辑屏幕', v: s.width + ' x ' + s.height },
           { k: '物理屏幕', v: s.deviceWidth + ' x ' + s.deviceHeight },
@@ -186,6 +217,10 @@ export default {
         self.lines.push('兼容性: ' + compatLine(comp))
         self.tsText = self.fmtTs(rep.ts)
         log('检测页', self.lines.join(' | ').slice(0, 700))
+        probeVersionApis().then(function (arr) {
+          if (arr && arr.length) log('版本探针', arr.join(' ;; ').slice(0, 900))
+          else log('版本探针', '无可用接口')
+        }).catch(function () {})
       } catch (e) {
         self.verdictText = '探测异常'
         self.verdictSub = String((e && e.message) || e)
