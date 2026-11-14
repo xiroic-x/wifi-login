@@ -5,7 +5,7 @@
  * 本模块只做三件事: 自动采集(设备/网络/状态/日志) -> 组装请求体 -> 提交并归一化结果。
  * 采集项与「用户条款」页列出的内容一一对应, 不多收集任何东西。
  */
-import { request, systemInfo } from './net.js'
+import { request, systemInfo, wifiSsid } from './net.js'
 import { readLog } from './logger.js'
 import { collectReport } from './probe.js'
 import { readState } from './store.js'
@@ -48,6 +48,49 @@ export async function checkReachable(timeoutSec) {
   /* 有些固件断网时返回 0 + 空体; 能拿到 healthz 内容才算通 */
   if (code === 0 && body.indexOf('"ok"') >= 0) return { reachable: true, reason: '' }
   return { reachable: false, reason: 'HTTP ' + code }
+}
+
+/*
+ * 判断当前是否联网(给反馈页顶部提示条用)。
+ * 不联网也不发请求 —— 全部走本地快速读取, 断网时必须能立刻给结论:
+ *   1) 连不上 WiFi(SSID 为空) -> 直接算断网
+ *   2) 上次检测结果 status: free(无需登录能上网) / portal(认证通过能上网) -> 联网
+ *   3) 其它 -> 按断网处理(引导去官网), 但提交按钮不禁用
+ * 每一步都带硬超时, 任何一项失败都不阻塞返回。
+ */
+export async function probeNetStatus(deps) {
+  var d = deps || {}
+  var out = { online: false, status: '', ssid: '', reason: '' }
+  var st = null
+  try {
+    st = await Promise.race([
+      readState(),
+      new Promise(function (resolve) { setTimeout(function () { resolve(null) }, 2500) })
+    ])
+  } catch (e) { st = null }
+  var status = String((st && st.status) || '')
+  out.status = status
+  var ssid = ''
+  try {
+    ssid = await Promise.race([
+      wifiSsid(),
+      new Promise(function (resolve) { setTimeout(function () { resolve('') }, 2500) })
+    ]) || ''
+  } catch (e) { ssid = '' }
+  out.ssid = ssid
+  if (!ssid) {
+    out.online = false
+    out.reason = '未连接到 WiFi'
+    return out
+  }
+  if (status === 'free' || status === 'portal') {
+    out.online = true
+    out.reason = status === 'free' ? '无需登录即可上网' : '认证已通过'
+    return out
+  }
+  out.online = false
+  out.reason = status ? '上次检测: ' + status : '还没做过连通性检测'
+  return out
 }
 
 /* 日志上限: 服务端单条 256KB, 这里取 120KB, 足够定位又不会传太久 */

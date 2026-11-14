@@ -15,7 +15,15 @@
         <text class="verdictsub" v-if="verdictSub">{{ verdictSub }}</text>
       </div>
 
-      <text class="section">系统与设备</text>
+      <text class="section">真实系统信息</text>
+      <div class="card">
+        <div class="kv" v-for="(row, i) in realRows" :key="'r' + i">
+          <text class="k">{{ row.k }}</text>
+          <text class="v">{{ row.v }}</text>
+        </div>
+      </div>
+
+      <text class="section">框架与屏幕（非系统版本）</text>
       <div class="card">
         <div class="kv" v-for="(row, i) in systemRows" :key="'s' + i">
           <text class="k">{{ row.k }}</text>
@@ -80,6 +88,7 @@ export default {
     return {
       busy: false,
       tsText: '-',
+      realRows: [],
       systemRows: [],
       probed: [],
       moduleCount: 0,
@@ -140,11 +149,28 @@ export default {
           },
         })
         var s = rep.system || {}
+        /* 真实系统信息(原生读 /Version、sys_config sku、/etc/hostname、device-tree) */
+        var rr = rep.real || {}
+        self.realRows = [
+          { k: 'SKU', v: rr.sku || '-' },
+          { k: '主机名', v: rr.hostname || '-' },
+          { k: 'PCBA', v: rr.pcbaVersion || '-' },
+          { k: '词典笔 OS', v: rr.osVersion || '-' },
+          { k: '固件', v: rr.firmwareVersion || '-' },
+          { k: '应用版本', v: rr.appVersion || '-' },
+          { k: '编译时间', v: rr.buildTime || '-' },
+          { k: '系统底座', v: (rr.osPretty || rr.osName || '-') + (rr.osVersionId ? ' ' + rr.osVersionId : '') },
+          { k: '内核', v: rr.kernelVersion || '-' },
+          { k: '架构', v: rr.arch || '-' },
+          { k: '板型', v: rr.boardModel || '-' },
+          { k: 'SoC', v: rr.cpuHardware || rr.boardCompatible || '-' },
+        ]
+        /* 框架层信息(不是系统版本, 单独一组) */
         self.systemRows = [
-          { k: '平台', v: s.platform },
-          { k: '系统版本', v: s.osVersion },
+          { k: '框架平台', v: s.runtimePlatform || s.platform || '-' },
+          { k: '框架版本', v: s.runtimeVersion || s.osVersion || '-' },
           { k: 'API 版本', v: s.apiVersion },
-          { k: '设备型号', v: s.deviceModel },
+          { k: '框架机型', v: s.frameworkModel || s.deviceModel || '-' },
           { k: '机型族', v: s.theme },
           { k: '逻辑屏幕', v: s.width + ' x ' + s.height },
           { k: '物理屏幕', v: s.deviceWidth + ' x ' + s.deviceHeight },

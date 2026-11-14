@@ -159,11 +159,24 @@ export default {
       this.agreed = !this.agreed;
     },
 
-    /* 读取设备信息(仅展示, 与提交内容一致) + 上次检测结果(用于判断是否联网) */
+    /* 联网判定: 本地快速读取(SSID + 上次检测结果), 不发网络请求 */
+    async refreshNet() {
+      try {
+        var ns = await probeNetStatus({ skipNet: true })
+        this.offline = !(ns && ns.online)
+        this.netDetail = (ns && ns.reason) ? ns.reason : ''
+        log('反馈', 'net=' + (ns && ns.online ? 'online' : 'offline') +
+          ' status=' + ((ns && ns.status) || '空') + ' ssid=' + ((ns && ns.ssid) ? '有' : '无'))
+      } catch (e) {
+        this.offline = true
+        log('反馈', '联网判定异常 ' + (e && e.message ? e.message : e))
+      }
+    },
+
+    /* 读取设备信息(仅展示, 与提交内容一致) */
     async loadDevice() {
       try {
         var ctx = await collectContext({ skipNet: true })
-        this.netState = (ctx && ctx.state) ? ctx.state : {}
         var si = ctx.system || {}
         var sku = si.sku || ''
         var os = si.osVersion || ''
@@ -291,11 +304,15 @@ export default {
     }
   },
   onShow() {
-    var self = this
-    this.loadDevice().then(function () { self.applyNetState() }).catch(function () {
-      self.reachChecked = true
-      self.offline = true
-    })
+    /*
+     * 关键: 提示条必须先出来。
+     * 默认按无网显示(离线也不出错), 再异步修正 —— 不能等设备信息读完再判断,
+     * 断网时那一步可能很慢, 页面会看起来一片空白。
+     */
+    this.reachChecked = true
+    this.netDetail = ''
+    this.refreshNet()
+    this.loadDevice()
   },
   onHide() {},
   onUnload() {}
