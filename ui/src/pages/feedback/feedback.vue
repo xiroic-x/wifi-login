@@ -13,15 +13,11 @@
         <text class="hinttext">说说你遇到的问题，会自动附上本机的设备信息与运行日志，方便定位。</text>
       </div>
 
-      <!-- 联网状态提示: 断网时引导去官网, 联网时说明这样更精准 -->
-      <div class="offline" v-if="offline">
-        <text class="offlinetitle">当前没有检测到可用网络</text>
-        <text class="offlinetext">这里提交需要网络。可以用电脑或手机打开下面的网址反馈：</text>
-        <text class="offlinelink">{{ siteUrl }}</text>
-        <text class="offlinetext">在设备上把 WiFi 登录成功后再提交，会自动带上机型和日志，定位更快。</text>
-      </div>
-      <div class="online" v-else-if="reachChecked">
-        <text class="onlinetext">网络可用（{{ netDetail }}）：现在提交会自动附上机型、系统版本与运行日志，问题更好定位。</text>
+      <!-- 网页反馈入口: 设备没网时也能用电脑/手机提交, 不做网络判断 -->
+      <div class="webbar">
+        <text class="webbartext">设备没网时，请用电脑或手机打开：</text>
+        <text class="weblink">{{ siteUrl }}</text>
+        <text class="webbarnote">推荐在设备联网后再提交 —— 会自动带上机型与日志，问题更好定位。</text>
       </div>
 
       <text class="section">问题描述（必填）</text>
@@ -30,9 +26,9 @@
         <text class="inputtext" v-else>{{ summary }}</text>
       </div>
 
-      <text class="section">详细情况（选填）</text>
+      <text class="section">详细情况（必填）</text>
       <div class="inputbox-small" @click="editDetail">
-        <text class="inputph" v-if="!detail">点这里补充：什么时候开始的、哪个网络</text>
+        <text class="inputph" v-if="!detail">点这里写：什么时候开始的、哪个网络、点了什么</text>
         <text class="inputtext" v-else>{{ detail }}</text>
       </div>
 
@@ -129,10 +125,6 @@ export default {
       showTerms: false,
       agreed: false,
       contact: '',
-      offline: false,
-      reachChecked: false,
-      netState: {},
-      netDetail: '',
       siteUrl: FEEDBACK_SITE,
       version: APP_VERSION,
       deviceText: '读取中…',
@@ -157,20 +149,6 @@ export default {
     },
     toggleAgree() {
       this.agreed = !this.agreed;
-    },
-
-    /* 联网判定: 本地快速读取(SSID + 上次检测结果), 不发网络请求 */
-    async refreshNet() {
-      try {
-        var ns = await probeNetStatus({ skipNet: true })
-        this.offline = !(ns && ns.online)
-        this.netDetail = (ns && ns.reason) ? ns.reason : ''
-        log('反馈', 'net=' + (ns && ns.online ? 'online' : 'offline') +
-          ' status=' + ((ns && ns.status) || '空') + ' ssid=' + ((ns && ns.ssid) ? '有' : '无'))
-      } catch (e) {
-        this.offline = true
-        log('反馈', '联网判定异常 ' + (e && e.message ? e.message : e))
-      }
     },
 
     /* 读取设备信息(仅展示, 与提交内容一致) */
@@ -228,24 +206,6 @@ export default {
       }
     },
 
-    /*
-     * 联网判定: 这个软件本身就在做连通性检测, 直接复用结果, 不再单独探活。
-     *   status = 'free'   -> 能直接上网(无需登录), 算联网
-     *   status = 'portal' -> 已登录通过、能上网, 算联网
-     *   其它(offline/空/未检测) -> 按断网处理, 引导去官网
-     */
-    applyNetState() {
-      this.reachChecked = true
-      var st = this.netState || {}
-      var s = String(st.status || '')
-      this.netDetail = s
-      var online = (s === 'free' || s === 'portal')
-      this.offline = !online
-      if (this.offline) {
-        log('反馈', '未检测到可用网络(status=' + (s || '空') + '), 显示官网引导')
-      }
-    },
-
     async editDetail() {
       var v = await this.askText('补充细节: 什么时候、哪个网络、点了什么', this.detail, 300)
       if (v === null) return
@@ -263,7 +223,12 @@ export default {
       }
       if (!this.summary || this.summary.length < 2) {
         this.resultBox = 'result result-warn';
-        this.resultMsg = '请先点上面的输入框，写一句问题描述';
+        this.resultMsg = '请先点「问题描述」输入框，写一句问题描述';
+        return
+      }
+      if (!this.detail || this.detail.length < 2) {
+        this.resultBox = 'result result-warn';
+        this.resultMsg = '请把「详细情况」填写完整：什么时候开始、哪个网络、点了什么';
         return
       }
       this.busy = true;
@@ -287,15 +252,10 @@ export default {
           this.resultBox = 'result result-err';
           this.resultMsg = (r && r.message) ? r.message : '提交失败';
           log('反馈', '提交失败 ' + this.resultMsg);
-          /* 提交失败基本就是连不上服务: 直接把页面切成无网引导, 不再让用户干瞪眼 */
-          this.reachChecked = true;
-          this.offline = true;
         }
       } catch (e) {
         this.resultBox = 'result result-err';
-        this.resultMsg = '没连上反馈服务，可能是设备当前没有联网';
-        this.reachChecked = true;
-        this.offline = true;
+        this.resultMsg = '没连上反馈服务：设备可能没联网，可用电脑或手机打开上方网址反馈';
         log('反馈', '提交异常 ' + (e && e.message ? e.message : e));
       } finally {
         this.busy = false;
@@ -304,14 +264,7 @@ export default {
     }
   },
   onShow() {
-    /*
-     * 关键: 提示条必须先出来。
-     * 默认按无网显示(离线也不出错), 再异步修正 —— 不能等设备信息读完再判断,
-     * 断网时那一步可能很慢, 页面会看起来一片空白。
-     */
-    this.reachChecked = true
-    this.netDetail = ''
-    this.refreshNet()
+    /* 不做网络判断: 顶部固定显示官网入口, 设备信息异步读, 不影响页面先出来 */
     this.loadDevice()
   },
   onHide() {},
@@ -401,6 +354,16 @@ export default {
   margin-top: 6px; margin-bottom: 2px; padding-left: 2px;
 }
 .grouptext { font-size: 13px; color: #9aa4b2; line-height: 20px; }
+
+/* 网页反馈入口栏(固定显示, 不做网络判断) */
+.webbar {
+  border-radius: 8px; background-color: #14161a;
+  padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 8px;
+  margin-bottom: 6px;
+}
+.webbartext { font-size: 13px; color: #9aa4b2; line-height: 19px; }
+.weblink { font-size: 13px; color: #6ec1ff; line-height: 19px; margin-top: 2px; }
+.webbarnote { font-size: 12px; color: #808a96; line-height: 18px; margin-top: 4px; }
 
 /* 联网状态条 */
 .offline {
