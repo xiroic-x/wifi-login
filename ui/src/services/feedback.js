@@ -28,14 +28,25 @@ export var FEEDBACK_SITE = 'https://wifi.xiro.qzz.io/feedback.html'
  * 返回 { reachable, reason }: reason 用于给用户解释。
  */
 export async function checkReachable(timeoutSec) {
+  var sec = timeoutSec || 5
   var r = null
   try {
-    r = await request(FEEDBACK_BASE + '/healthz', 'GET', timeoutSec || 6)
+    /* 必须加硬超时: 断网原生层可能既不 resolve 也不 reject, 页面会一直等不到结论 */
+    r = await Promise.race([
+      request(FEEDBACK_BASE + '/healthz', 'GET', sec),
+      new Promise(function (resolve) {
+        setTimeout(function () { resolve(null) }, sec * 1000 + 500)
+      })
+    ])
   } catch (e) {
     return { reachable: false, reason: '网络请求失败' }
   }
+  if (!r) return { reachable: false, reason: '连接超时' }
   var code = (r && r.statusCode) ? r.statusCode : 0
+  var body = String((r && r.body) || '')
   if (code >= 200 && code < 500) return { reachable: true, reason: '' }
+  /* 有些固件断网时返回 0 + 空体; 能拿到 healthz 内容才算通 */
+  if (code === 0 && body.indexOf('"ok"') >= 0) return { reachable: true, reason: '' }
   return { reachable: false, reason: 'HTTP ' + code }
 }
 

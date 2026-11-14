@@ -15,13 +15,13 @@
 
       <!-- 联网状态提示: 断网时引导去官网, 联网时说明这样更精准 -->
       <div class="offline" v-if="offline">
-        <text class="offlinetitle">设备当前没有联网</text>
+        <text class="offlinetitle">当前没有检测到可用网络</text>
         <text class="offlinetext">这里提交需要网络。可以用电脑或手机打开下面的网址反馈：</text>
         <text class="offlinelink">{{ siteUrl }}</text>
-        <text class="offlinetext">在设备联网后再提交，能自动带上机型和日志，定位会更快。</text>
+        <text class="offlinetext">在设备上把 WiFi 登录成功后再提交，会自动带上机型和日志，定位更快。</text>
       </div>
       <div class="online" v-else-if="reachChecked">
-        <text class="onlinetext">设备已联网：现在提交会自动附上机型、系统版本与运行日志，问题更好定位。</text>
+        <text class="onlinetext">网络可用（{{ netDetail }}）：现在提交会自动附上机型、系统版本与运行日志，问题更好定位。</text>
       </div>
 
       <text class="section">问题描述（必填）</text>
@@ -41,11 +41,9 @@
         <text class="inputph" v-if="!contact">点这里填 QQ 号或邮箱</text>
         <text class="inputtext" v-else>{{ contact }}</text>
       </div>
-      <div class="grouperow" @click="toggleGroup">
-        <div :class="wantGroup ? 'agbox-on' : 'agbox'">
-          <text class="agcheck" v-if="wantGroup">√</text>
-        </div>
-        <text class="grouptext">希望被拉进用户群，方便后续跟进</text>
+      <div class="grouperow" @click="openGroup">
+        <text class="grouptext">也可以加入用户群，直接问：</text>
+        <text class="agreelink">查看群二维码</text>
       </div>
 
       <text class="section">将一并发送的信息</text>
@@ -105,7 +103,7 @@
 </template>
 
 <script>
-import { submitWithContext, collectContext, collectLog, checkReachable, FEEDBACK_SITE } from '../../services/feedback.js'
+import { submitWithContext, collectContext, collectLog, FEEDBACK_SITE } from '../../services/feedback.js'
 import { APP_VERSION } from '../../services/version.js'
 import { SystemIme } from '../../services/ime.js'
 import { log } from '../../services/logger.js'
@@ -131,9 +129,10 @@ export default {
       showTerms: false,
       agreed: false,
       contact: '',
-      wantGroup: false,
       offline: false,
       reachChecked: false,
+      netState: {},
+      netDetail: '',
       siteUrl: FEEDBACK_SITE,
       version: APP_VERSION,
       deviceText: '读取中…',
@@ -160,10 +159,11 @@ export default {
       this.agreed = !this.agreed;
     },
 
-    /* 读取设备信息(仅展示, 与提交内容一致) */
+    /* 读取设备信息(仅展示, 与提交内容一致) + 上次检测结果(用于判断是否联网) */
     async loadDevice() {
       try {
         var ctx = await collectContext({ skipNet: true })
+        this.netState = (ctx && ctx.state) ? ctx.state : {}
         var si = ctx.system || {}
         var sku = si.sku || ''
         var os = si.osVersion || ''
@@ -206,20 +206,30 @@ export default {
       this.contact = v.slice(0, 60)
     },
 
-    toggleGroup() {
-      this.wantGroup = !this.wantGroup
+    /* 用户群: 二维码在「关于」页, 这里直接跳过去 */
+    openGroup() {
+      try {
+        $falcon.navTo('about', {})
+      } catch (e) {
+        log('反馈', '跳转关于页失败 ' + (e && e.message ? e.message : e))
+      }
     },
 
-    /* 联网探测: 断网时页面上会引导去官网反馈 */
-    async probeReachable() {
-      try {
-        var r = await checkReachable(6)
-        this.reachChecked = true
-        this.offline = !(r && r.reachable)
-        if (this.offline) log('反馈', '反馈服务不可达, 引导去官网: ' + (r && r.reason))
-      } catch (e) {
-        this.reachChecked = true
-        this.offline = true
+    /*
+     * 联网判定: 这个软件本身就在做连通性检测, 直接复用结果, 不再单独探活。
+     *   status = 'free'   -> 能直接上网(无需登录), 算联网
+     *   status = 'portal' -> 已登录通过、能上网, 算联网
+     *   其它(offline/空/未检测) -> 按断网处理, 引导去官网
+     */
+    applyNetState() {
+      this.reachChecked = true
+      var st = this.netState || {}
+      var s = String(st.status || '')
+      this.netDetail = s
+      var online = (s === 'free' || s === 'portal')
+      this.offline = !online
+      if (this.offline) {
+        log('反馈', '未检测到可用网络(status=' + (s || '空') + '), 显示官网引导')
       }
     },
 
@@ -253,8 +263,7 @@ export default {
         var r = await submitWithContext({
           summary: this.summary,
           description: this.detail,
-          contact: this.contact,
-          wantGroup: this.wantGroup
+          contact: this.contact
         }, { skipNet: true });
         if (r && r.ok) {
           this.resultBox = 'result result-ok';
@@ -265,10 +274,16 @@ export default {
           this.resultBox = 'result result-err';
           this.resultMsg = (r && r.message) ? r.message : '提交失败';
           log('反馈', '提交失败 ' + this.resultMsg);
+          /* 提交失败基本就是连不上服务: 直接把页面切成无网引导, 不再让用户干瞪眼 */
+          this.reachChecked = true;
+          this.offline = true;
         }
       } catch (e) {
         this.resultBox = 'result result-err';
-        this.resultMsg = '提交异常: ' + (e && e.message ? e.message : e);
+        this.resultMsg = '没连上反馈服务，可能是设备当前没有联网';
+        this.reachChecked = true;
+        this.offline = true;
+        log('反馈', '提交异常 ' + (e && e.message ? e.message : e));
       } finally {
         this.busy = false;
         this.stage = '';
@@ -276,8 +291,11 @@ export default {
     }
   },
   onShow() {
-    this.loadDevice();
-    this.probeReachable();
+    var self = this
+    this.loadDevice().then(function () { self.applyNetState() }).catch(function () {
+      self.reachChecked = true
+      self.offline = true
+    })
   },
   onHide() {},
   onUnload() {}
