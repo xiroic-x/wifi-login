@@ -5,6 +5,8 @@
  * 每项都带来源或标记, 探不到就如实报 -, 不猜。
  */
 import { envSsid } from './net-core.js'
+import { systemInfo } from './net.js'
+import { log } from './logger.js'
 
 /* 固件可能注册的 JSAPI 模块名(逐项探测; 固件真报名单以 Object.keys 为准) */
 var MODULE_CANDIDATES = [
@@ -87,12 +89,23 @@ export function frameworkInfo() {
 
 /* 采集真实系统信息: 平台层没实现/失败时返回空对象, 由页面显示「-」 */
 export async function realSystemInfo(getter) {
+  /*
+   * 真实系统信息来自平台层 systemInfo()(原生读 /Version、sys_config sku、/etc/hostname 等)。
+   * 调用方可以传自己的 getter; 不传时直接用平台层 —— 否则这里静默返回空对象,
+   * 页面上所有真实字段都会显示成 '-'。
+   */
   try {
-    if (typeof getter === 'function') {
-      var r = await getter()
+    var fn = (typeof getter === 'function') ? getter : systemInfo
+    if (typeof fn === 'function') {
+      var r = await fn()
       if (r && typeof r === 'object') return r
+      if (typeof r === 'string') {
+        try { return JSON.parse(r) } catch (e2) { return {} }
+      }
     }
-  } catch (e) {}
+  } catch (e) {
+    try { log('检测', '真实系统信息读取失败 ' + (e && e.message ? e.message : e)) } catch (e3) {}
+  }
   return {}
 }
 
