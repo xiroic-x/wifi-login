@@ -7,9 +7,9 @@
         <text class="brandname">WiFi 网络认证</text>
       </div>
       <div class="baractions">
-        <div class="btn ghost" @click="openDiag"><text class="btntext">检测</text></div>
-        <div class="btn ghost" @click="openAbout"><text class="btntext">关于</text></div>
-        <div class="btn primary" @click="runCheck(null, true)">
+        <div class="btn-ghost" @click="openDiag"><text class="btntext">检测</text></div>
+        <div class="btn-ghost" @click="openAbout"><text class="btntext">关于</text></div>
+        <div class="btn-primary" @click="runCheck(null, true)">
           <text class="btntext">{{ checking ? '检测中…' : '重新检测' }}</text>
         </div>
       </div>
@@ -51,16 +51,16 @@
         </div>
       </div>
       <div class="actions">
-        <div class="btn primary" v-if="showForm && !logging" @click="doLogin">
+        <div class="btn-primary" v-if="showForm && !logging" @click="doLogin">
           <text class="btntext">登 录</text>
         </div>
-        <div class="btn ghost" v-if="showForm && logging">
+        <div class="btn-ghost" v-if="showForm && logging">
           <text class="btntext">登录中…</text>
         </div>
-        <div class="btn ghost" v-if="canLogout && canManage" @click="openManagement">
+        <div class="btn-ghost" v-if="canLogout && canManage" @click="openManagement">
           <text class="btntext">设备管理</text>
         </div>
-        <div class="btn danger" v-if="canLogout" @click="doLogout">
+        <div class="btn-danger" v-if="canLogout" @click="doLogout">
           <text class="btntext">下 线</text>
         </div>
       </div>
@@ -78,19 +78,19 @@
 
     <!-- 手动服务器 -->
     <div class="panel" v-if="showManualServer">
-      <div class="field wide" @click="editServer">
+      <div class="field-wide" @click="editServer">
         <text class="fieldlabel">服务器</text>
         <text class="fieldvalue" v-if="manualServer">{{ manualServer }}</text>
         <text class="fieldvalue placeholder" v-if="!manualServer">点此输入认证服务器 IP[:端口]</text>
       </div>
       <div class="actions">
-        <div class="btn primary" @click="applyManualServer"><text class="btntext">确 定</text></div>
+        <div class="btn-primary" @click="applyManualServer"><text class="btntext">确 定</text></div>
       </div>
     </div>
 
     <!-- 底部状态条 -->
     <div class="foot">
-      <div class="dot sm" :class="msgClass"></div>
+      <div class="dot-sm" :class="msgClass"></div>
       <text class="foottext" :class="msgClass">{{ msg || '就绪' }}</text>
     </div>
   </div>
@@ -1164,34 +1164,34 @@ export default {
   height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
   align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn.ghost { background-color: #24272e; }
-.btn.primary { background-color: #4c9aff; }
-.btn.danger { background-color: #b3261e; }
+.btn-ghost { background-color: #24272e; }
+.btn-primary { background-color: #4c9aff; }
+.btn-danger { background-color: #b3261e; }
 .btntext { font-size: 14px; color: #ffffff; }
 .status {
   width: 100%; flex-direction: row; padding: 8px 14px; flex-wrap: wrap;
   background-color: #101215; border-bottom-width: 1px; border-bottom-color: #24272e;
   border-left-width: 3px; border-left-color: #24272e;
 }
-.status.free { border-left-color: #35c46b; }
-.status.ok { border-left-color: #35c46b; }
-.status.portal { border-left-color: #4c9aff; }
-.status.offline { border-left-color: #e5484d; }
-.status.busy { border-left-color: #ffb020; }
-.status.manual { border-left-color: #ffb020; }
+.status-free { border-left-color: #35c46b; }
+.status-ok { border-left-color: #35c46b; }
+.status-portal { border-left-color: #4c9aff; }
+.status-offline { border-left-color: #e5484d; }
+.status-busy { border-left-color: #ffb020; }
+.status-manual { border-left-color: #ffb020; }
 .statusleft { flex-direction: row; align-items: center; margin-right: 20px; }
 .statusright { flex: 1; flex-direction: row; align-items: center; flex-wrap: wrap; }
 .dot { width: 9px; height: 9px; border-radius: 5px; margin-right: 8px; background-color: #6b7480; }
-.dot.sm { width: 7px; height: 7px; border-radius: 4px; }
-.dot.free { background-color: #35c46b; }
-.dot.ok { background-color: #35c46b; }
-.dot.portal { background-color: #4c9aff; }
-.dot.offline { background-color: #e5484d; }
-.dot.busy { background-color: #ffb020; }
-.dot.manual { background-color: #ffb020; }
-.dot.info { background-color: #4c9aff; }
-.dot.warn { background-color: #ffb020; }
-.dot.error { background-color: #e5484d; }
+.dot-sm { width: 7px; height: 7px; border-radius: 4px; }
+.dot-free { background-color: #35c46b; }
+.dot-ok { background-color: #35c46b; }
+.dot-portal { background-color: #4c9aff; }
+.dot-offline { background-color: #e5484d; }
+.dot-busy { background-color: #ffb020; }
+.dot-manual { background-color: #ffb020; }
+.dot-info { background-color: #4c9aff; }
+.dot-warn { background-color: #ffb020; }
+.dot-error { background-color: #e5484d; }
 .statetext { font-size: 18px; color: #f2f4f8; font-weight: bold; }
 .metaline { font-size: 12px; color: #9aa4b2; margin-right: 14px; }
 .warnline { color: #ffb020; }
@@ -1206,7 +1206,7 @@ export default {
   background-color: #14161a; border-radius: 8px; padding-left: 10px; padding-right: 10px;
   flex-direction: row; align-items: center; border-width: 1px; border-color: #24272e;
 }
-.field.wide { max-width: none; }
+.field-wide { width: 100%; }
 .fieldlabel { font-size: 13px; color: #6b7480; margin-right: 8px; }
 .fieldvalue { font-size: 14px; color: #f2f4f8; flex: 1; }
 .placeholder { color: #5c6470; }
@@ -1214,7 +1214,7 @@ export default {
 .switchbox {
   width: 30px; height: 17px; border-radius: 9px; background-color: #2c3138; margin-right: 7px;
 }
-.switchbox.on { background-color: #35c46b; }
+.switchbox-on { background-color: #35c46b; }
 .switchtext { font-size: 13px; color: #9aa4b2; }
 .actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .chips { flex-direction: row; flex-wrap: wrap; flex: 1; }
@@ -1224,14 +1224,14 @@ export default {
   align-items: center; justify-content: center; margin-right: 8px; margin-bottom: 4px;
 }
 .chiptext { font-size: 13px; color: #9aa4b2; }
-.chiptext.on { color: #4c9aff; font-weight: bold; }
+.chiptext-on { color: #4c9aff; font-weight: bold; }
 .foot {
   width: 100%; height: 30px; flex-direction: row; align-items: center;
   padding-left: 14px; padding-right: 14px; background-color: #101215;
   border-top-width: 1px; border-top-color: #24272e;
 }
 .foottext { font-size: 13px; color: #9aa4b2; flex: 1; }
-.foottext.warn { color: #ffb020; }
-.foottext.error { color: #ff8a8d; }
+.foottext-warn { color: #ffb020; }
+.foottext-error { color: #ff8a8d; }
 </style>
 

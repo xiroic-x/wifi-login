@@ -3,8 +3,8 @@
     <div class="bar">
       <text class="bartitle">功能检测</text>
       <div class="baractions">
-        <div class="btn ghost" @click="refresh"><text class="btntext">{{ busy ? '探测中…' : '重新探测' }}</text></div>
-        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
+        <div class="btn-ghost" @click="refresh"><text class="btntext">{{ busy ? '探测中…' : '重新探测' }}</text></div>
+        <div class="btn-ghost" @click="goBack"><text class="btntext">返回</text></div>
       </div>
     </div>
 
@@ -247,14 +247,14 @@ export default {
   height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
   align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn.ghost { background-color: #24272e; }
+.btn-ghost { background-color: #24272e; }
 .btntext { font-size: 15px; color: #f2f4f8; }
 .body { flex: 1; padding-left: 14px; padding-right: 14px; padding-top: 8px; }
 .verdict { border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; border-left-width: 3px; flex-direction: column; }
-.verdict.ok { background-color: #10231a; border-left-color: #35c46b; }
-.verdict.warn { background-color: #2a2213; border-left-color: #ffb020; }
-.verdict.bad { background-color: #2a1518; border-left-color: #e5484d; }
-.verdict.busy { background-color: #14161a; border-left-color: #4c9aff; }
+.verdict-ok { background-color: #10231a; border-left-color: #35c46b; }
+.verdict-warn { background-color: #2a2213; border-left-color: #ffb020; }
+.verdict-bad { background-color: #2a1518; border-left-color: #e5484d; }
+.verdict-busy { background-color: #14161a; border-left-color: #4c9aff; }
 .verdicttext { font-size: 16px; color: #f2f4f8; font-weight: bold; }
 .verdictsub { font-size: 13px; color: #b8b2a8; margin-top: 2px; }
 .section { font-size: 14px; color: #4c9aff; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }

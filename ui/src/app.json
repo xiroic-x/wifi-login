@@ -3,7 +3,6 @@
     "index": "pages/index/index.vue",
     "management": "pages/management/management.vue",
     "diag": "pages/diag/diag.vue",
-    "cleanup": "pages/cleanup/cleanup.vue",
     "migrated": "pages/migrated/migrated.vue",
     "about": "pages/about/about.vue",
     "cleanUp": "pages/cleanup-cu/cleanUp.vue"

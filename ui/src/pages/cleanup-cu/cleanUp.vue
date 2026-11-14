@@ -3,7 +3,7 @@
     <div class="bar">
       <text class="bartitle">数据清理</text>
       <div class="baractions">
-        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
+        <div class="btn-ghost" @click="goBack"><text class="btntext">返回</text></div>
       </div>
     </div>
 
@@ -26,8 +26,8 @@
     </div>
 
     <div class="foot">
-      <div class="btn ghost" @click="goBack"><text class="btntext">取消</text></div>
-      <div class="btn danger" @click="doClear">
+      <div class="btn-ghost" @click="goBack"><text class="btntext">取消</text></div>
+      <div class="btn-danger" @click="doClear">
         <text class="btntext">{{ result ? '完成' : (busy ? '清除中…' : '确认清除全部账号') }}</text>
       </div>
     </div>
@@ -96,7 +96,7 @@ export default {
   height: 32px; padding-left: 16px; padding-right: 16px; border-radius: 16px;
   align-items: center; justify-content: center; margin-left: 10px;
 }
-.btn.ghost { background-color: #24272e; }
-.btn.danger { background-color: #b3261e; }
+.btn-ghost { background-color: #24272e; }
+.btn-danger { background-color: #b3261e; }
 .btntext { font-size: 15px; color: #f2f4f8; }
 </style>

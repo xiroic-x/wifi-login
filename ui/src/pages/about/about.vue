@@ -3,7 +3,7 @@
     <div class="bar">
       <text class="bartitle">关于</text>
       <div class="baractions">
-        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
+        <div class="btn-ghost" @click="goBack"><text class="btntext">返回</text></div>
       </div>
     </div>
 
@@ -72,7 +72,7 @@ export default {
   height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
   align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn.ghost { background-color: #24272e; }
+.btn-ghost { background-color: #24272e; }
 .btntext { font-size: 15px; color: #f2f4f8; }
 .body { flex: 1; padding-left: 16px; padding-right: 16px; padding-top: 10px; }
 .hero { flex-direction: row; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }

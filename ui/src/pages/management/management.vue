@@ -3,13 +3,13 @@
     <div class="bar">
       <text class="bartitle">设备管理</text>
       <div class="baractions">
-        <div class="btn ghost" @click="reload">
+        <div class="btn-ghost" @click="reload">
           <text class="btntext">{{ loading ? '刷新中…' : '刷新' }}</text>
         </div>
-        <div class="btn ghost" @click="confirmOffAll">
+        <div class="btn-ghost" @click="confirmOffAll">
           <text class="btntext">全部下线</text>
         </div>
-        <div class="btn ghost" @click="goBack">
+        <div class="btn-ghost" @click="goBack">
           <text class="btntext">返回</text>
         </div>
       </div>
@@ -61,8 +61,8 @@
         <text class="dlgtitle">确认操作</text>
         <text class="dlgtext">{{ ask.text }}</text>
         <div class="dlgbtns">
-          <div class="btn ghost" @click="ask.show = false"><text class="btntext">取消</text></div>
-          <div class="btn danger" @click="ask.confirm()"><text class="btntext">确定</text></div>
+          <div class="btn-ghost" @click="ask.show = false"><text class="btntext">取消</text></div>
+          <div class="btn-danger" @click="ask.confirm()"><text class="btntext">确定</text></div>
         </div>
       </div>
     </div>
@@ -433,9 +433,9 @@ export default {
   height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
   align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn.ghost { background-color: #24272e; }
-.btn.danger { background-color: #b3261e; }
-.btn.sm { height: 28px; padding-left: 12px; padding-right: 12px; border-radius: 14px; margin-left: 8px; }
+.btn-ghost { background-color: #24272e; }
+.btn-danger { background-color: #b3261e; }
+.btn-sm { height: 28px; padding-left: 12px; padding-right: 12px; border-radius: 14px; margin-left: 8px; }
 .btntext { font-size: 14px; color: #f2f4f8; }
 .summary {
   width: 100%; flex-direction: row; padding: 8px 16px; flex-wrap: wrap;
@@ -451,7 +451,7 @@ export default {
   background-color: #14161a; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;
   flex-direction: row; align-items: center; border-left-width: 3px; border-left-color: #24272e; flex-wrap: wrap;
 }
-.item.self { border-left-color: #4c9aff; background-color: #131a24; }
+.item-self { border-left-color: #4c9aff; background-color: #131a24; }
 .itemmain { flex: 1; flex-direction: column; }
 .itemrow { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .itemname { font-size: 15px; color: #f2f4f8; }
@@ -468,12 +468,12 @@ export default {
   border-top-width: 1px; border-top-color: #24272e;
 }
 .dot { width: 7px; height: 7px; border-radius: 4px; margin-right: 8px; background-color: #6b7480; }
-.dot.info { background-color: #4c9aff; }
-.dot.warn { background-color: #ffb020; }
-.dot.error { background-color: #e5484d; }
+.dot-info { background-color: #4c9aff; }
+.dot-warn { background-color: #ffb020; }
+.dot-error { background-color: #e5484d; }
 .foottext { font-size: 13px; color: #9aa4b2; flex: 1; }
-.foottext.warn { color: #ffb020; }
-.foottext.error { color: #ff8a8d; }
+.foottext-warn { color: #ffb020; }
+.foottext-error { color: #ff8a8d; }
 .mask {
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   background-color: rgba(0, 0, 0, 0.62); align-items: center; justify-content: center;
