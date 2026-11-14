@@ -146,6 +146,59 @@ function latin1(bytes) {
 }
 
 /*
+ * UTF-8 解码。
+ *
+ * QuickJS 不一定有 TextDecoder, 所以手写一份备用实现。
+ * 之前响应体只走 latin1(逐字节 fromCharCode), 中文会被拆成单字节乱码 ——
+ * 服务端 JSON 里的中文 message / 工单标题会变成字节数列, JSON.parse 直接失败。
+ * 非法序列按替换字符处理, 绝不抛错。
+ */
+function utf8Decode(bytes) {
+  try {
+    if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes)
+  } catch (e) {}
+  var out = ''
+  var i = 0
+  var n = bytes.length
+  var REPL = '\ufffd'
+  while (i < n) {
+    var c = bytes[i]
+    var cp = 0
+    var need = 0
+    if (c < 0x80) { cp = c; need = 0 }
+    else if (c >= 0xc2 && c <= 0xdf) { cp = c & 0x1f; need = 1 }
+    else if (c >= 0xe0 && c <= 0xef) { cp = c & 0x0f; need = 2 }
+    else if (c >= 0xf0 && c <= 0xf4) { cp = c & 0x07; need = 3 }
+    else { out += REPL; i++; continue }
+    if (i + need >= n) { out += REPL; break }
+    var okSeq = true
+    for (var k = 1; k <= need; k++) {
+      var cc = bytes[i + k]
+      if ((cc & 0xc0) !== 0x80) { okSeq = false; break }
+      cp = (cp << 6) | (cc & 0x3f)
+    }
+    if (!okSeq) { out += REPL; i++; continue }
+    i += need + 1
+    if (cp > 0xffff) {
+      cp -= 0x10000
+      out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff))
+    } else {
+      out += String.fromCharCode(cp)
+    }
+  }
+  return out
+}
+
+/* 响应体转文本: 优先 UTF-8; 含 NUL 或解码出替换字符过多时退回 latin1(二进制安全) */
+function bodyText(bytes) {
+  var t = utf8Decode(bytes)
+  var bad = 0
+  for (var i = 0; i < t.length; i++) if (t.charCodeAt(i) === 0xfffd) bad++
+  if (bad > 0 && bad * 8 > t.length) return latin1(bytes)
+  return t
+}
+
+/*
  * 归一化任意原始响应。requestedUrl 用于识别"模块自己跟随了跳转":
  * 部分固件的 http 模块会自动 follow redirect, 此时最终 URL 与请求 URL 不同,
  * 只要它落在别的 host 上就等价于一次门户跳转 —— 合成 location 供上层识别。
@@ -197,7 +250,8 @@ export function normalizeRaw(raw, requestedUrl, maxBytes) {
     headerLines: rawLines.length ? rawLines : lines,
     headers: headers,
     body: bytes,
-    text: latin1(bytes),
+    /* 必须按 UTF-8 解码: latin1 会把中文拆成单字节, 服务端 JSON 解析直接失败 */
+    text: bodyText(bytes),
     error: '',
     finalUrl: finalUrl,
   }
