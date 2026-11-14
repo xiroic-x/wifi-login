@@ -624,6 +624,23 @@ public:
      * /proc/cpuinfo。全部只读, 不采集序列号 / MAC / 账号 / 位置。
      */
 
+    // 执行命令并取首行 (用于 get_pcba_version 这类厂商工具; 只读, 不写系统)
+    static std::string runCmd(const std::string &cmd)
+    {
+        FILE *p = popen(cmd.c_str(), "r");
+        if (!p) return std::string();
+        std::string out;
+        char buf[256];
+        if (fgets(buf, sizeof(buf), p)) out.assign(buf);
+        pclose(p);
+        while (!out.empty()) {
+            char c = out[out.size() - 1];
+            if (c == 10 || c == 13 || c == 32) out.erase(out.size() - 1);
+            else break;
+        }
+        return out;
+    }
+
     // readTextFile(path) -> string (读不到返回空串; 去掉尾部换行与 NUL)
     static std::string readTextFile(const std::string &path)
     {
@@ -693,6 +710,15 @@ public:
             std::string osr = readTextFile("/etc/os-release");
             /* /Version 是厂商写的系统版本文件: Version: 4.3.5 等 */
             std::string verFile = readTextFile("/Version");
+            /* 机型名: /etc/hostname 是厂商写的主机名(实测 Melon_pro-3562) */
+            std::string hostname = readTextFile("/etc/hostname");
+            /* SKU 由厂商 sys_config 持有(实测 OVERHEAD_X62_SKU_CHN_PLUS) */
+            std::string sku = runCmd("/usr/bin/sys_config sku 2>/dev/null");
+            /* SKU -> 对外型号: 词典笔产品命名(YDPX6-2CHNPLUS 等)。
+             * 只做已知映射, 未命中的机型如实显示 SKU 本身, 不猜测。 */
+            std::string modelName;
+            if (sku == "OVERHEAD_X62_SKU_CHN_PLUS") modelName = "YDPX6-2CHNPLUS";
+            else modelName = sku.empty() ? hostname : sku;
             std::string ver = readTextFile("/proc/version");
             std::string cpu = readTextFile("/proc/cpuinfo");
 
@@ -731,7 +757,11 @@ public:
             json += "\"osVersion\":\"" + jsonEsc(kvOf(verFile, "Version")) + "\",";
             json += "\"firmwareVersion\":\"" + jsonEsc(kvOf(verFile, "Firmware")) + "\",";
             json += "\"appVersion\":\"" + jsonEsc(kvOf(verFile, "DictPen_APP")) + "\",";
-            json += "\"buildTime\":\"" + jsonEsc(kvOf(verFile, "Build_Time")) + "\"";
+            json += "\"buildTime\":\"" + jsonEsc(kvOf(verFile, "Build_Time")) + "\",";
+            json += "\"modelName\":\"" + jsonEsc(modelName) + "\",";
+            json += "\"sku\":\"" + jsonEsc(sku) + "\",";
+            json += "\"hostname\":\"" + jsonEsc(hostname) + "\",";
+            json += "\"pcbaVersion\":\"" + jsonEsc(runCmd("/usr/bin/get_pcba_version 2>/dev/null")) + "\"";
             json += "}";
             info.post(json);
         } catch (const std::exception &e) {
