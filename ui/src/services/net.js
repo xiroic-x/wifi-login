@@ -101,7 +101,20 @@ var request = createRequest(async function (ctx) {
     }
   }
   var body = ctx.body == null ? '' : String(ctx.body)
-  var res = await client().request(ctx.url, ctx.method, ctx.timeout, body, headerText)
+  var res = null
+  try {
+    res = await client().request(ctx.url, ctx.method, ctx.timeout, body, headerText)
+  } catch (e) {
+    /* 原生层抛错必须留痕: 否则上层只看到 statusCode undefined, 无法定位 */
+    try {
+      if (typeof log === 'function') {
+        log('网络', '原生请求失败 ' + ctx.method + ' ' + ctx.url +
+          ' -> ' + (e && e.message ? e.message : String(e)) +
+          ' body=' + body.length + 'B')
+      }
+    } catch (e2) {}
+    throw e
+  }
   return {
     statusCode: res && res.statusCode,
     headers: res && res.headers,
