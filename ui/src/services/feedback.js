@@ -42,7 +42,7 @@ export async function checkReachable(timeoutSec) {
   try {
     /* 必须加硬超时: 断网原生层可能既不 resolve 也不 reject, 页面会一直等不到结论 */
     r = await Promise.race([
-      request(FEEDBACK_BASE + '/healthz', 'GET', sec),
+      request({ url: FEEDBACK_BASE + '/healthz', method: 'GET', timeout: sec }),
       new Promise(function (resolve) {
         setTimeout(function () { resolve(null) }, sec * 1000 + 500)
       })
@@ -203,7 +203,15 @@ export async function submitFeedback(payload) {
   var url = FEEDBACK_BASE + '/api/v1/feedback'
   var res = null
   try {
-    res = await request(url, 'POST', 20, body, ['Content-Type: application/json'])
+    /* request 只接受对象参数 { url, method, timeout, body, headers, maxBytes } */
+    res = await request({
+      url: url,
+      method: 'POST',
+      timeout: 20,
+      body: body,
+      headers: { 'Content-Type': 'application/json' },
+      maxBytes: 8192
+    })
   } catch (e) {
     return { ok: false, message: '网络请求失败: ' + (e && e.message ? e.message : e) }
   }
@@ -216,7 +224,14 @@ export async function submitFeedback(payload) {
       String(url).indexOf('https://') >= 0) {
     var httpUrl = String(url).replace(/^https:\/\//i, 'http://')
     try {
-      var res2 = await request(httpUrl, 'POST', 20, body, ['Content-Type: application/json'])
+      var res2 = await request({
+        url: httpUrl,
+        method: 'POST',
+        timeout: 20,
+        body: body,
+        headers: { 'Content-Type': 'application/json' },
+        maxBytes: 8192
+      })
       var out2 = parseSubmit(res2)
       if (out2 && out2.ok) return out2
     } catch (e2) {}
