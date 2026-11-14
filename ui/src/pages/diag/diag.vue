@@ -164,8 +164,11 @@ export default {
         var s = rep.system || {}
         var r = rep.real || {}
         self.realRows = [
-          { k: '系统', v: (r.osPretty || r.osName || '-') },
-          { k: '系统版本', v: r.osVersionId || r.osVersion || '-' },
+          { k: '词典笔 OS', v: r.osVersion || '-' },
+          { k: '固件', v: r.firmwareVersion || '-' },
+          { k: '应用版本', v: r.appVersion || '-' },
+          { k: '编译时间', v: r.buildTime || '-' },
+          { k: '系统底座', v: (r.osPretty || r.osName || '-') + (r.osVersionId ? ' ' + r.osVersionId : '') },
           { k: '内核', v: r.kernelVersion || '-' },
           { k: '架构', v: r.arch || '-' },
           { k: '板型', v: r.boardModel || '-' },

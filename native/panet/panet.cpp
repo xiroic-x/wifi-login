@@ -691,6 +691,8 @@ public:
     {
         try {
             std::string osr = readTextFile("/etc/os-release");
+            /* /Version 是厂商写的系统版本文件: Version: 4.3.5 等 */
+            std::string verFile = readTextFile("/Version");
             std::string ver = readTextFile("/proc/version");
             std::string cpu = readTextFile("/proc/cpuinfo");
 
@@ -725,7 +727,11 @@ public:
             json += "\"boardModel\":\"" + jsonEsc(readTextFile("/sys/firmware/devicetree/base/model")) + "\",";
             json += "\"boardCompatible\":\"" + jsonEsc(readTextFile("/sys/firmware/devicetree/base/compatible")) + "\",";
             json += "\"cpuHardware\":\"" + jsonEsc(kvOf(cpu, "Hardware")) + "\",";
-            json += "\"cpuModel\":\"" + jsonEsc(kvOf(cpu, "model name")) + "\"";
+            json += "\"cpuModel\":\"" + jsonEsc(kvOf(cpu, "model name")) + "\",";
+            json += "\"osVersion\":\"" + jsonEsc(kvOf(verFile, "Version")) + "\",";
+            json += "\"firmwareVersion\":\"" + jsonEsc(kvOf(verFile, "Firmware")) + "\",";
+            json += "\"appVersion\":\"" + jsonEsc(kvOf(verFile, "DictPen_APP")) + "\",";
+            json += "\"buildTime\":\"" + jsonEsc(kvOf(verFile, "Build_Time")) + "\"";
             json += "}";
             info.post(json);
         } catch (const std::exception &e) {
