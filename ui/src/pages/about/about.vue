@@ -50,7 +50,7 @@
     <div class="qrmask" v-if="showQr" @click="showQr = false">
       <div class="qrcard" @click="noop">
         <text class="qrtitle">扫码加入 WiFi-login 用户群</text>
-        <image class="qrimg" src="../../assets/qq-group.jpg"></image>
+        <image class="qrimg" :src="qrImage"></image>
         <text class="qrnum">QQ 群号：1132515689</text>
         <text class="qrtip">用手机 QQ「扫一扫」识别上方二维码</text>
         <div class="qrdone" @click="showQr = false">
@@ -63,6 +63,7 @@
 
 <script>
 import { APP_VERSION, APP_ID } from '../../services/version.js'
+import { QQ_QR_IMAGE } from '../../services/qq-qr.js'
 
 const REPO_URL = 'https://github.com/xiroic-x/wifi-login'
 const QQ_GROUP = '1132515689'
@@ -75,6 +76,7 @@ export default {
       version: APP_VERSION,
       appid: APP_ID,
       showQr: false,
+      qrImage: QQ_QR_IMAGE,
       repoUrl: REPO_URL,
       qqGroup: QQ_GROUP,
     }
@@ -136,7 +138,7 @@ export default {
   height: 198px;
   padding-left: 20px;
   padding-right: 20px;
-  padding-top: 10px;
+  padding-top: 8px;
 }
 .titlerow { flex-direction: row; align-items: center; }
 .appname { font-size: 24px; color: #ffffff; font-weight: bold; }
@@ -212,24 +214,24 @@ export default {
   justify-content: center;
 }
 .qrcard {
-  width: 300px;
+  width: 236px;
   background-color: #14161a;
   border-radius: 10px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
   padding-left: 12px;
   padding-right: 12px;
   flex-direction: column;
   align-items: center;
 }
-.qrtitle { font-size: 17px; color: #ffffff; font-weight: bold; margin-bottom: 6px; }
-.qrimg { width: 190px; height: 190px; border-radius: 6px; }
-.qrnum { font-size: 16px; color: #6ec1ff; margin-top: 6px; }
-.qrtip { font-size: 13px; color: #9aa4b2; margin-top: 2px; }
+.qrtitle { font-size: 15px; color: #ffffff; font-weight: bold; margin-bottom: 4px; }
+.qrimg { width: 108px; height: 108px; border-radius: 6px; }
+.qrnum { font-size: 15px; color: #6ec1ff; margin-top: 4px; }
+.qrtip { font-size: 12px; color: #9aa4b2; margin-top: 1px; }
 .qrdone {
-  margin-top: 8px;
-  width: 110px;
-  height: 30px;
+  margin-top: 6px;
+  width: 96px;
+  height: 26px;
   border-radius: 15px;
   background-color: #2f6fed;
   align-items: center;

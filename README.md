@@ -240,7 +240,7 @@ QQ 群号：**1132515689** · [点击加入群聊【WiFi-login用户群】](http
 
 | 扫码加入 |
 | --- |
-| ![](screenshots/qq-group.jpg) |
+| <img src="screenshots/qq-group.jpg" width="150" alt="WiFi-login 用户群二维码"> |
 
 > 手机 QQ「扫一扫」识别上方二维码即可加入；提问请附机型、SKU 与「功能检测」页的自检结果。
 
