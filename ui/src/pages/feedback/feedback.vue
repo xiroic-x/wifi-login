@@ -234,15 +234,19 @@ export default {
       this.busy = true;
       this.resultMsg = '';
       this.resultId = 0;
-      this.stage = '采集信息…';
+      this.stage = '自检中…';
+      var self = this;
       try {
         log('反馈', '开始提交 len=' + this.summary.length);
-        this.stage = '提交中…';
+        /* 提交前会先跑一遍完整功能检测, 结果自动写进 wifi.log 并随反馈上传 */
         var r = await submitWithContext({
           summary: this.summary,
           description: this.detail,
           contact: this.contact
-        }, { skipNet: true });
+        }, {
+          skipNet: true,
+          onStage: function (s) { self.stage = s }
+        });
         if (r && r.ok) {
           this.resultBox = 'result result-ok';
           this.resultMsg = r.duplicate ? '这个问题已有人反馈，已补充到原工单' : '提交成功，感谢反馈！';

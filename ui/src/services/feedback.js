@@ -10,6 +10,7 @@ import { readLog } from './logger.js'
 import { collectReport } from './probe.js'
 import { readState } from './store.js'
 import { bodyText as bytesToText } from './net-core.js'
+import { runDiagnostics, logReport } from './diagnostics.js'
 import { APP_VERSION } from './version.js'
 
 /*
@@ -161,7 +162,8 @@ export async function buildPayload(input, deps) {
   var i = input || {}
   var ctx = await collectContext(deps)
   var si = ctx.system || {}
-  var report = ctx.report || {}
+  /* 优先用调用方跑完的完整自检报告(含五项自检结论); 没有才退回轻量采集 */
+  var report = (deps && deps.report) ? deps.report : (ctx.report || {})
   var NL2 = String.fromCharCode(10)
   var lines = []
   if (i.description) lines.push(i.description)
@@ -297,13 +299,47 @@ export function friendlyError(data) {
   return '提交失败' + (code ? ' (' + code + ')' : '')
 }
 
-/* 一键: 采集 + 提交 */
+/*
+ * 一键: 功能自检 -> 写日志 -> 采集 -> 提交。
+ *
+ * 提交前先完整跑一遍功能检测(与检测页同一套), 把结果逐行写进 wifi.log:
+ * 这样即使用户只写一句话, 反馈里也带着当时的系统/固件/自检快照,
+ * 维护者拿到日志就能判断是环境问题还是适配问题。
+ *
+ * deps.onStage: 可选回调, 用于页面上显示"自检中/提交中"。
+ */
 export async function submitWithContext(input, deps) {
-  var built = await buildPayload(input, deps)
+  var d = deps || {}
+  var stage = typeof d.onStage === 'function' ? d.onStage : function () {}
+
+  /* 1) 完整自检(永不抛错, 失败也给结论) */
+  stage('自检中…')
+  var report = null
+  try {
+    report = await runDiagnostics()
+  } catch (e) {
+    report = null
+  }
+
+  /* 2) 结果写日志(逐行, 便于检索) */
+  var logged = 0
+  try {
+    logged = logReport(report, '自检')
+  } catch (e) {}
+
+  /* 3) 采集 + 提交: 把完整报告带进 probe.json */
+  stage('提交中…')
+  var merged = {}
+  if (d) { for (var k in d) { if (k !== 'report') merged[k] = d[k] } }
+  merged.report = report
+  var built = await buildPayload(input, merged)
   var payload = built.payload
   if (!payload.summary || payload.summary.length < 2) {
     return { ok: false, message: '请先写一句问题描述' }
   }
-  return submitFeedback(payload)
+  var out = await submitFeedback(payload)
+  /* 把自检行数与结果一并回给页面, 便于显示 */
+  if (out && typeof out === 'object') out.diagLines = logged
+  return out
 }
 
