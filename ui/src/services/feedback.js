@@ -11,11 +11,20 @@ import { collectReport } from './probe.js'
 import { readState } from './store.js'
 import { APP_VERSION } from './version.js'
 
-/* 反馈服务地址: 线上 Worker。本地联调时改成 http://<电脑IP>:8790 */
-export var FEEDBACK_BASE = 'https://api.wifi.xiro.qzz.io'
+/*
+ * 反馈服务地址。
+ *
+ * 必须用 http: 本项目的自研网络库 panet 只实现 POSIX socket, 明确不支持 TLS
+ * (native/panet/panet.cpp: "https not supported"), 传 https 会直接失败(HTTP 0)。
+ * 该域名 http 直连可达(实测 200, 无 301 跳转), 所以这里固定 http。
+ * 本地联调时用 setFeedbackBase('http://<电脑IP>:8790')。
+ */
+export var FEEDBACK_BASE = 'http://api.wifi.xiro.qzz.io'
 
 export function setFeedbackBase(base) {
   var b = String(base || '').trim().replace(/\/+$/, '')
+  /* 传进来的 https 一律降级成 http: panet 不支持 TLS, 否则提交必然 HTTP 0 */
+  b = b.replace(/^https:\/\//i, 'http://')
   if (b) FEEDBACK_BASE = b
   return FEEDBACK_BASE
 }
@@ -190,14 +199,29 @@ export async function buildPayload(input, deps) {
 
 /* 提交: 返回 {ok, id, issueUrl, aiUrl, message} */
 export async function submitFeedback(payload) {
+  var body = JSON.stringify(payload)
   var url = FEEDBACK_BASE + '/api/v1/feedback'
   var res = null
   try {
-    res = await request(url, 'POST', 20, JSON.stringify(payload), ['Content-Type: application/json'])
+    res = await request(url, 'POST', 20, body, ['Content-Type: application/json'])
   } catch (e) {
     return { ok: false, message: '网络请求失败: ' + (e && e.message ? e.message : e) }
   }
-  return parseSubmit(res)
+  var out = parseSubmit(res)
+  /*
+   * panet 不支持 TLS: 若地址被配成 https, 原生层拿不到响应(statusCode 0 且无正文)。
+   * 这里自动换 http 再试一次, 用户不用关心协议差异。
+   */
+  if (!out.ok && (out.status === 0 || out.status === undefined) &&
+      String(url).indexOf('https://') >= 0) {
+    var httpUrl = String(url).replace(/^https:\/\//i, 'http://')
+    try {
+      var res2 = await request(httpUrl, 'POST', 20, body, ['Content-Type: application/json'])
+      var out2 = parseSubmit(res2)
+      if (out2 && out2.ok) return out2
+    } catch (e2) {}
+  }
+  return out
 }
 
 /* 归一化服务端响应 */
