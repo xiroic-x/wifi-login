@@ -50,11 +50,13 @@
   `630xx` 业务码本地映射中文；按 `heartBeatCyc` 发送 `doHeartBeat.jsp` 保活（`keepAlive`），
   支持 `pws?t=lo` 下线。传输层（`native/panet`）同步支持 POST 表单 body 与自定义请求头，
   并对请求头做注入校验（拒绝 CR/LF、过滤逐跳头）。协议取证见 [docs/h3c-imc-portal.md](docs/h3c-imc-portal.md)。
+  （PR #2）
 - **CVI 机型真机适配**（固件 1.6.3 / api=1）：`net-cvi` 改用固件原生
   `$falcon.jsapi.http.request({url, method, timeout, headers:['K: v']})`（实测唯一可用形态），
   并把返回翻译成统一形态：成功 `{result}` → `200`、`errorMessage.resCode` → 对应状态码（204 即空包体），
   其余 `error` → 失败；`detect` 增加 `portalProxyIP` / `portalProxyPort` 兜底，
   适配器与门户判定无需为 CVI 开特例。实测记录见 [docs/cvi-jsapi-http.md](docs/cvi-jsapi-http.md)。
+  （PR #2）
 
 - **问题反馈页**（新页面，主页顶栏「反馈」进入）：用户用系统输入法填写「问题描述」与「详细情况」
   （均为必填）与「联系方式」（QQ / 邮箱，选填），提交时自动附带机型 SKU、词典笔系统版本、
@@ -83,11 +85,9 @@
 - 真实门户页的 `portalProxyIP` 解析建议在目标校园网复测（本地已用 mock 页覆盖）。
 - H3C iMC 真网登录 / 心跳 / 下线全流程仍需在目标校园网走一遍。
 
-## 贡献者
+### 贡献者
 
-- **H3C iMC Portal 认证适配器** 与 **CVI 机型真机适配** 由 [@wanfeng74](https://github.com/wanfeng74) 通过
-  [PR #2](https://github.com/xiroic-x/wifi-login/pull/2) 贡献（提交 `feat: 适配 H3C iMC Portal 认证`、
-  `feat(cvi): 真机适配 CVI 固件 $falcon.jsapi.http`），已并入 1.1.5。
+- **H3C iMC Portal 认证适配器**、**CVI 机型真机适配**：[PR #2](https://github.com/xiroic-x/wifi-login/pull/2)（@wanfeng74）
 
 ## [1.1.4] - 2026-11-08（已发布）
 
