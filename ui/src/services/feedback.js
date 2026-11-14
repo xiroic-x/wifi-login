@@ -103,7 +103,9 @@ export async function probeNetStatus(deps) {
 }
 
 /* 日志上限: 服务端单条 256KB, 这里取 120KB, 足够定位又不会传太久 */
-var LOG_MAX = 120 * 1024
+/* 日志上限。原生 POST 上限已放宽到 512KB, 但整包越小上传越快、越不容易超时:
+ * 40KB 足以覆盖一次完整的"检测→识别→登录→心跳"过程。 */
+var LOG_MAX = 40 * 1024
 
 function pad2(n) { return n < 10 ? '0' + n : '' + n }
 

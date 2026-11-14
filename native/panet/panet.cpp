@@ -510,7 +510,9 @@ public:
             if (timeoutSec <= 0 || timeoutSec > 60) timeoutSec = 8;
             std::string body = info.Length() > 3 && info[3].is_string() ? info[3].string_value() : std::string();
             std::string headerText = info.Length() > 4 && info[4].is_string() ? info[4].string_value() : std::string();
-            if (body.size() > 64 * 1024) throw std::runtime_error("request body too large");
+            /* 上限 512KB: 反馈上报要把整份日志(可到 120KB)装进一次 POST,
+             * 原来的 64KB 会让"带完整日志的反馈"必然失败(body too large)。 */
+            if (body.size() > 512 * 1024) throw std::runtime_error("request body too large");
             if (headerText.size() > 16 * 1024) throw std::runtime_error("request headers too large");
 
             HttpResponse r = httpFetch(url, method, timeoutSec, body, headerText);
