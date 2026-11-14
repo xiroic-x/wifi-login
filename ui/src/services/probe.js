@@ -172,6 +172,7 @@ export function reportLines(rep) {
   if (!rep) return L
   var s = rep.system || {}
   var r = rep.real || {}
+  L.push('型号=' + (r.modelName || '-') + ' SKU=' + (r.sku || '-') + ' 主机名=' + (r.hostname || '-') + ' PCBA=' + (r.pcbaVersion || '-'))
   L.push('词典笔OS=' + (r.osVersion || '-') + ' 固件=' + (r.firmwareVersion || '-') + ' 应用=' + (r.appVersion || '-') + ' 编译=' + (r.buildTime || '-'))
   L.push('系统=' + (r.osPretty || r.osName || '-') + (r.osVersionId ? ' ' + r.osVersionId : '')
     + ' 内核=' + (r.kernelVersion || '-') + ' 架构=' + (r.arch || '-'))
