@@ -211,7 +211,7 @@ export async function submitFeedback(payload) {
     res = await request({
       url: url,
       method: 'POST',
-      timeout: 40,
+      timeout: 15,
       body: body,
       headers: { 'Content-Type': 'application/json' },
       maxBytes: 8192
@@ -231,7 +231,7 @@ export async function submitFeedback(payload) {
       var res2 = await request({
         url: httpUrl,
         method: 'POST',
-        timeout: 40,
+        timeout: 15,
         body: body,
         headers: { 'Content-Type': 'application/json' },
         maxBytes: 8192

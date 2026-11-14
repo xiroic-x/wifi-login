@@ -130,13 +130,6 @@ static UrlParts parseUrl(const std::string &url)
     return u;
 }
 
-static const char *CRLF = "\r\n";
-static const char *CRLFCRLF = "\r\n\r\n";
-static const char *CHUNK_END = "\r\n0\r\n\r\n";
-
-/* 前置声明: TcpConn::recvAll 里判断响应头字段要用(实现见下方的全局 toLower) */
-static std::string toLower(std::string s);
-
 class TcpConn {
 public:
     ~TcpConn() { closeFd(); }
@@ -213,24 +206,14 @@ public:
         }
     }
 
-    /*
-     * 读完整响应。
-     *
-     * 不能只等对端关闭: 我们发的是 Connection: close, 但 Cloudflare 等反代会回
-     * Connection: keep-alive 并保持连接, 只等 close 会一直读到 SO_RCVTIMEO 超时
-     * (errno=11 EAGAIN), 表现为"提交卡一下然后失败"。
-     * 这里按 HTTP 语义判定读完: 头部结束时看 Content-Length 或 chunked 终止块。
-     */
+    // 读到对端关闭或超时; 超时抛出
     std::string recvAll()
     {
         std::string out;
         char buf[4096];
-        size_t headerEnd = std::string::npos;   // header 结束位置
-        long needBody = -1;                     // Content-Length; -1 未知
-        bool chunked = false;
         for (;;) {
             ssize_t n = ::recv(_fd, buf, sizeof(buf), 0);
-            if (n == 0) break;                  // 对端确实关闭了
+            if (n == 0) break;
             if (n < 0) {
                 if (errno == EINTR) continue;
                 if (out.empty()) throw std::runtime_error("recv failed errno=" + std::to_string(errno));
@@ -238,50 +221,9 @@ public:
             }
             out.append(buf, (size_t)n);
             if (out.size() > 4 * 1024 * 1024) throw std::runtime_error("response too large");
-
-            /* 第一次拿到完整头部时, 解析出 body 长度语义 */
-            if (headerEnd == std::string::npos) {
-                headerEnd = out.find(CRLFCRLF);
-                if (headerEnd != std::string::npos) {
-                    std::string head = out.substr(0, headerEnd);
-                    std::string lower = toLower(head);
-                    if (lower.find("transfer-encoding:") != std::string::npos &&
-                        lower.find("chunked") != std::string::npos) {
-                        chunked = true;
-                    } else {
-                        size_t pos = lower.find("content-length:");
-                        if (pos != std::string::npos) {
-                            size_t eol = lower.find(CRLF, pos);
-                            std::string num = lower.substr(pos + 15, eol == std::string::npos ? std::string::npos : eol - pos - 15);
-                            try { needBody = std::stol(num); } catch (...) { needBody = -1; }
-                        } else {
-                            needBody = 0;   // 无 body (204/HEAD 等)
-                        }
-                    }
-                    headerEnd += 4;
-                }
-            }
-            if (headerEnd == std::string::npos) continue;
-
-            /* 定长: 收满 Content-Length 就够了 */
-            if (!chunked && needBody >= 0) {
-                if ((long)(out.size() - headerEnd) >= needBody) break;
-                continue;
-            }
-            /* chunked: 收到终止块(0 + 空行)就够了 */
-            if (chunked) {
-                /* 终止块: "0" + CRLF + CRLF(紧跟头时可能只有 "0\r\n\r\n") */
-                std::string tail = std::string("0") + CRLF + CRLF;
-                bool tailMatched = out.size() >= tail.size() &&
-                    out.compare(out.size() - tail.size(), tail.size(), tail) == 0;
-                if (out.find(CHUNK_END, headerEnd) != std::string::npos || tailMatched) break;
-                continue;
-            }
         }
         return out;
     }
-
-
 
 private:
     void closeFd()
