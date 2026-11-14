@@ -13,6 +13,17 @@
         <text class="hinttext">说说你遇到的问题，会自动附上本机的设备信息与运行日志，方便定位。</text>
       </div>
 
+      <!-- 联网状态提示: 断网时引导去官网, 联网时说明这样更精准 -->
+      <div class="offline" v-if="offline">
+        <text class="offlinetitle">设备当前没有联网</text>
+        <text class="offlinetext">这里提交需要网络。可以用电脑或手机打开下面的网址反馈：</text>
+        <text class="offlinelink">{{ siteUrl }}</text>
+        <text class="offlinetext">在设备联网后再提交，能自动带上机型和日志，定位会更快。</text>
+      </div>
+      <div class="online" v-else-if="reachChecked">
+        <text class="onlinetext">设备已联网：现在提交会自动附上机型、系统版本与运行日志，问题更好定位。</text>
+      </div>
+
       <text class="section">问题描述（必填）</text>
       <div class="inputbox" @click="editSummary">
         <text class="inputph" v-if="!summary">点这里输入：例如「连上 WiFi 后一直提示需要认证」</text>
@@ -23,6 +34,18 @@
       <div class="inputbox-small" @click="editDetail">
         <text class="inputph" v-if="!detail">点这里补充：什么时候开始的、哪个网络</text>
         <text class="inputtext" v-else>{{ detail }}</text>
+      </div>
+
+      <text class="section">联系方式（选填，方便回访）</text>
+      <div class="inputbox-small" @click="editContact">
+        <text class="inputph" v-if="!contact">点这里填 QQ 号或邮箱</text>
+        <text class="inputtext" v-else>{{ contact }}</text>
+      </div>
+      <div class="grouperow" @click="toggleGroup">
+        <div :class="wantGroup ? 'agbox-on' : 'agbox'">
+          <text class="agcheck" v-if="wantGroup">√</text>
+        </div>
+        <text class="grouptext">希望被拉进用户群，方便后续跟进</text>
       </div>
 
       <text class="section">将一并发送的信息</text>
@@ -82,7 +105,7 @@
 </template>
 
 <script>
-import { submitWithContext, collectContext, collectLog } from '../../services/feedback.js'
+import { submitWithContext, collectContext, collectLog, checkReachable, FEEDBACK_SITE } from '../../services/feedback.js'
 import { APP_VERSION } from '../../services/version.js'
 import { SystemIme } from '../../services/ime.js'
 import { log } from '../../services/logger.js'
@@ -107,6 +130,11 @@ export default {
       resultId: 0,
       showTerms: false,
       agreed: false,
+      contact: '',
+      wantGroup: false,
+      offline: false,
+      reachChecked: false,
+      siteUrl: FEEDBACK_SITE,
       version: APP_VERSION,
       deviceText: '读取中…',
       logSizeText: ''
@@ -172,6 +200,29 @@ export default {
       log('反馈', '已输入描述 ' + this.summary.length + ' 字');
     },
 
+    async editContact() {
+      var v = await this.askText('QQ 号或邮箱（方便回访）', this.contact, 60)
+      if (v === null) return
+      this.contact = v.slice(0, 60)
+    },
+
+    toggleGroup() {
+      this.wantGroup = !this.wantGroup
+    },
+
+    /* 联网探测: 断网时页面上会引导去官网反馈 */
+    async probeReachable() {
+      try {
+        var r = await checkReachable(6)
+        this.reachChecked = true
+        this.offline = !(r && r.reachable)
+        if (this.offline) log('反馈', '反馈服务不可达, 引导去官网: ' + (r && r.reason))
+      } catch (e) {
+        this.reachChecked = true
+        this.offline = true
+      }
+    },
+
     async editDetail() {
       var v = await this.askText('补充细节: 什么时候、哪个网络、点了什么', this.detail, 300)
       if (v === null) return
@@ -201,7 +252,9 @@ export default {
         this.stage = '提交中…';
         var r = await submitWithContext({
           summary: this.summary,
-          description: this.detail
+          description: this.detail,
+          contact: this.contact,
+          wantGroup: this.wantGroup
         }, { skipNet: true });
         if (r && r.ok) {
           this.resultBox = 'result result-ok';
@@ -224,6 +277,7 @@ export default {
   },
   onShow() {
     this.loadDevice();
+    this.probeReachable();
   },
   onHide() {},
   onUnload() {}
@@ -305,6 +359,29 @@ export default {
 }
 .agcheck { font-size: 14px; color: #ffffff; }
 .agreetext { font-size: 14px; color: #c8ccd4; line-height: 20px; }
+
+/* 加群选项行 */
+.grouperow {
+  flex-direction: row; align-items: center; flex-wrap: wrap;
+  margin-top: 6px; margin-bottom: 2px; padding-left: 2px;
+}
+.grouptext { font-size: 13px; color: #9aa4b2; line-height: 20px; }
+
+/* 联网状态条 */
+.offline {
+  border-radius: 8px; background-color: #2a2213;
+  padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 8px;
+  margin-bottom: 6px;
+}
+.offlinetitle { font-size: 14px; color: #ffb020; font-weight: bold; line-height: 20px; }
+.offlinetext { font-size: 13px; color: #c8ccd4; line-height: 19px; }
+.offlinelink { font-size: 13px; color: #6ec1ff; line-height: 19px; margin-top: 2px; margin-bottom: 2px; }
+.online {
+  border-radius: 8px; background-color: #10231a;
+  padding-left: 10px; padding-right: 10px; padding-top: 6px; padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+.onlinetext { font-size: 13px; color: #9aa4b2; line-height: 19px; }
 .agreelink { font-size: 14px; color: #6ec1ff; line-height: 20px; }
 
 .result {

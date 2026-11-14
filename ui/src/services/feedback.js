@@ -20,6 +20,25 @@ export function setFeedbackBase(base) {
   return FEEDBACK_BASE
 }
 
+/* 官网反馈页: 设备完全没网时, 让用户用电脑/手机去这里手动反馈 */
+export var FEEDBACK_SITE = 'https://wifi.xiro.qzz.io/feedback.html'
+
+/*
+ * 反馈服务是否可达(轻量探活)。判不出来时按"可达"处理 —— 不能因为探测失败就不让用户提交。
+ * 返回 { reachable, reason }: reason 用于给用户解释。
+ */
+export async function checkReachable(timeoutSec) {
+  var r = null
+  try {
+    r = await request(FEEDBACK_BASE + '/healthz', 'GET', timeoutSec || 6)
+  } catch (e) {
+    return { reachable: false, reason: '网络请求失败' }
+  }
+  var code = (r && r.statusCode) ? r.statusCode : 0
+  if (code >= 200 && code < 500) return { reachable: true, reason: '' }
+  return { reachable: false, reason: 'HTTP ' + code }
+}
+
 /* 日志上限: 服务端单条 256KB, 这里取 120KB, 足够定位又不会传太久 */
 var LOG_MAX = 120 * 1024
 
@@ -110,6 +129,8 @@ export async function buildPayload(input, deps) {
     logs: logs,
     meta: { clientVersion: APP_VERSION }
   }
+  /* 用户在页面上勾了"想加群联系": 打成标签, 维护者一看就知道要拉群 */
+  if (i.wantGroup) payload.tags = ['想加群']
   return { payload: payload, ctx: ctx }
 }
 
