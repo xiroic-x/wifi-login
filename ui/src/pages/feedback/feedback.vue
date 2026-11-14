@@ -22,7 +22,7 @@
       </div>
 
       <text class="section">详细情况（选填）</text>
-      <div class="inputbox inputbox-small" @click="editDetail">
+      <div class="inputbox-small" @click="editDetail">
         <text class="inputph" v-if="!detail">点这里补充：什么时候开始的、哪个网络、点了什么按钮</text>
         <text class="inputtext" v-else>{{ detail }}</text>
       </div>
@@ -40,7 +40,7 @@
       <div :class="resultClass || 'result'" v-if="resultMsg">
         <text class="resulttext">{{ resultMsg }}</text>
       </div>
-      <div class="result result-ok" v-if="resultId">
+      <div class="result-ok-box" v-if="resultId">
         <text class="resulttext">工单号：{{ resultId }}</text>
       </div>
     </scroller>
@@ -188,35 +188,103 @@ export default {
 
 <style>
 .page { width: 100%; height: 100%; background-color: #0b0c0e; flex-direction: column; }
-.bar { width: 100%; height: 44px; background-color: #14161a; flex-direction: row; align-items: center; justify-content: space-between; padding-left: 14px; padding-right: 14px; }
-.bartitle { font-size: 20px; color: #ffffff; font-weight: bold; }
-.baractions { flex-direction: row; align-items: center; }
-.btn { height: 30px; border-radius: 15px; align-items: center; justify-content: center; padding-left: 14px; padding-right: 14px; margin-left: 8px; }
-.btn-ghost { background-color: #24272e; }
-.btn-primary { background-color: #4c9aff; }
-.btntext { font-size: 15px; color: #ffffff; }
+
+/* 顶栏: 与 diag/index 一致, 高度固定 44, 允许换行避免按钮被挤出 */
+.bar {
+  width: 100%; height: 44px; background-color: #14161a;
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 14px; padding-right: 12px; flex-wrap: wrap;
+}
+.bartitle { font-size: 20px; color: #f2f4f8; font-weight: bold; }
+.baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+
+/* 按钮: 高/圆角在这里定义, 变体只改背景色(Weex 不支持多类名) */
+.btn-ghost {
+  height: 30px; min-width: 56px; padding-left: 14px; padding-right: 14px;
+  border-radius: 15px; background-color: #24272e; margin-left: 8px;
+  align-items: center; justify-content: center;
+}
+.btn-primary {
+  height: 30px; min-width: 90px; padding-left: 18px; padding-right: 18px;
+  border-radius: 15px; background-color: #4c9aff; margin-left: 8px;
+  align-items: center; justify-content: center;
+}
+.btntext { font-size: 14px; color: #ffffff; }
+
+/* 正文可滚动 */
 .body { flex: 1; width: 100%; padding-left: 14px; padding-right: 14px; padding-top: 8px; }
-.hint { background-color: #14161a; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-.hinttext { font-size: 14px; color: #9aa4b2; }
-.section { font-size: 15px; color: #6ec1ff; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }
-.inputbox { min-height: 40px; background-color: #14161a; border-radius: 8px; padding: 8px 10px; justify-content: center; }
-.inputbox-small { min-height: 34px; }
-.inputph { font-size: 14px; color: #6b7280; }
-.inputtext { font-size: 15px; color: #ffffff; }
-.collect { background-color: #14161a; border-radius: 8px; padding: 8px 10px; }
-.collectrow { flex-direction: row; align-items: flex-start; margin-bottom: 3px; }
-.dotok { font-size: 14px; color: #35c46b; margin-right: 4px; }
-.collecttext { font-size: 13px; color: #9aa4b2; flex: 1; }
-.result { border-radius: 8px; padding: 8px 10px; margin-top: 8px; background-color: #14161a; }
+.hint {
+  background-color: #14161a; border-radius: 8px;
+  padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 8px;
+  margin-bottom: 6px;
+}
+.hinttext { font-size: 14px; color: #9aa4b2; line-height: 20px; }
+.section {
+  font-size: 15px; color: #6ec1ff; font-weight: bold;
+  margin-top: 8px; margin-bottom: 4px; line-height: 20px;
+}
+
+/* 输入框: 固定高度, 点击区域明确 */
+.inputbox {
+  width: 100%; height: 44px; background-color: #14161a; border-radius: 8px;
+  padding-left: 10px; padding-right: 10px;
+  align-items: center;
+}
+.inputbox-small {
+  width: 100%; height: 38px; background-color: #14161a; border-radius: 8px;
+  padding-left: 10px; padding-right: 10px; align-items: center;
+}
+.inputph { font-size: 14px; color: #6b7280; line-height: 20px; }
+.inputtext { font-size: 15px; color: #ffffff; line-height: 20px; }
+
+/* 采集清单 */
+.collect {
+  background-color: #14161a; border-radius: 8px;
+  padding-left: 10px; padding-right: 10px; padding-top: 6px; padding-bottom: 6px;
+}
+.collectrow { flex-direction: row; align-items: flex-start; margin-bottom: 4px; }
+.dotok { font-size: 14px; color: #35c46b; margin-right: 4px; line-height: 20px; }
+.collecttext { font-size: 13px; color: #9aa4b2; flex: 1; line-height: 20px; }
+
+/* 结果条 */
+.result {
+  border-radius: 8px; background-color: #14161a;
+  padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 8px;
+  margin-top: 8px;
+}
 .result-ok { background-color: #10231a; }
+.result-ok-box {
+  border-radius: 8px; background-color: #10231a;
+  padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 8px;
+  margin-top: 8px;
+}
 .result-err { background-color: #2a1518; }
 .result-warn { background-color: #2a2213; }
-.resulttext { font-size: 14px; color: #d8d8d8; }
-.foot { width: 100%; height: 48px; background-color: #14161a; flex-direction: row; align-items: center; justify-content: flex-end; padding-left: 14px; padding-right: 14px; }
-.mask { position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); align-items: center; justify-content: center; }
-.termscard { width: 560px; background-color: #14161a; border-radius: 10px; padding: 12px; flex-direction: column; }
+.resulttext { font-size: 14px; color: #d8d8d8; line-height: 20px; }
+
+/* 底栏 */
+.foot {
+  width: 100%; height: 48px; background-color: #14161a;
+  flex-direction: row; align-items: center; justify-content: flex-end;
+  padding-left: 14px; padding-right: 14px;
+}
+
+/* 条款弹层 */
+.mask {
+  position: absolute; left: 0px; top: 0px; width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.88);
+  align-items: center; justify-content: center;
+}
+.termscard {
+  width: 520px; background-color: #14161a; border-radius: 10px;
+  padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px;
+  flex-direction: column;
+}
 .termstitle { font-size: 17px; color: #ffffff; font-weight: bold; margin-bottom: 6px; }
-.termsscroll { height: 150px; }
-.termstext { font-size: 13px; color: #c8ccd4; margin-bottom: 4px; }
-.termsdone { margin-top: 8px; height: 30px; border-radius: 15px; background-color: #4c9aff; align-items: center; justify-content: center; }
+.termsscroll { height: 140px; }
+.termstext { font-size: 13px; color: #c8ccd4; line-height: 19px; margin-bottom: 5px; }
+.termsdone {
+  height: 30px; width: 110px; border-radius: 15px; background-color: #4c9aff;
+  align-items: center; justify-content: center; margin-top: 8px;
+}
 </style>
