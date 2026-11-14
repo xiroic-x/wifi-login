@@ -7,7 +7,7 @@
       </div>
     </div>
 
-    <div class="body">
+    <scroller class="body">
       <div class="warncard">
         <text class="warntitle">将清除本应用保存的全部账号</text>
         <text class="warnsub">此操作不可撤销，清除后需要重新登录 WiFi</text>
@@ -23,7 +23,7 @@
       <text class="li">· 系统里其他应用的数据</text>
 
       <div class="result" v-if="result"><text class="resulttext">{{ result }}</text></div>
-    </div>
+    </scroller>
 
     <div class="foot">
       <div class="btn ghost" @click="goBack"><text class="btntext">取消</text></div>
@@ -77,7 +77,7 @@ export default {
 }
 .bartitle { font-size: 22px; color: #f2f4f8; font-weight: bold; }
 .baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
-.body { flex: 1; padding-left: 16px; padding-right: 16px; padding-top: 10px; }
+.body { flex: 1; width: 100%; padding-left: 16px; padding-right: 16px; padding-top: 10px; }
 .warncard {
   background-color: #2a1518; border-radius: 8px; padding: 10px 12px;
   border-left-width: 3px; border-left-color: #e5484d; margin-bottom: 10px;
