@@ -164,6 +164,8 @@ export default {
         var s = rep.system || {}
         var r = rep.real || {}
         self.realRows = [
+          { k: '型号', v: r.modelName || '-' },
+          { k: 'SKU', v: r.sku || '-' },
           { k: '词典笔 OS', v: r.osVersion || '-' },
           { k: '固件', v: r.firmwareVersion || '-' },
           { k: '应用版本', v: r.appVersion || '-' },
