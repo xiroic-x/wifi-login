@@ -190,7 +190,7 @@ function utf8Decode(bytes) {
 }
 
 /* 响应体转文本: 优先 UTF-8; 含 NUL 或解码出替换字符过多时退回 latin1(二进制安全) */
-function bodyText(bytes) {
+export function bodyText(bytes) {
   var t = utf8Decode(bytes)
   var bad = 0
   for (var i = 0; i < t.length; i++) if (t.charCodeAt(i) === 0xfffd) bad++

@@ -9,6 +9,7 @@ import { request, systemInfo, wifiSsid } from './net.js'
 import { readLog } from './logger.js'
 import { collectReport } from './probe.js'
 import { readState } from './store.js'
+import { bodyText as bytesToText } from './net-core.js'
 import { APP_VERSION } from './version.js'
 
 /*
@@ -242,14 +243,25 @@ export async function submitFeedback(payload) {
   return out
 }
 
-/* 归一化服务端响应 */
+/*
+ * 归一化服务端响应。
+ *
+ * 必须用 res.text(已按 UTF-8 解码的字符串), 不能用 res.body(Uint8Array):
+ * 直接 JSON.parse 一个 Uint8Array 会得到 "123,10,32,32,34,..." 这种字节数列,
+ * 中文更是乱码。res.text 由 net-core 的 bodyText() 产出, 兼容固件有无 TextDecoder。
+ */
 export function parseSubmit(res) {
   var status = (res && res.statusCode) ? res.statusCode : 0
-  var text = (res && res.body) || ''
+  var text = ''
+  if (res) {
+    if (typeof res.text === 'string' && res.text) text = res.text
+    else if (typeof res.body === 'string') text = res.body
+    else if (res.body && typeof res.body.length === 'number') text = bytesToText(res.body)
+  }
   var data = null
   try { data = JSON.parse(text) } catch (e) { data = null }
   if (!data) {
-    return { ok: false, status: status, message: '服务返回异常 (HTTP ' + status + '): ' + String(text).slice(0, 120) }
+    return { ok: false, status: status, message: '服务返回异常 (HTTP ' + status + '): ' + String(text).slice(0, 160) }
   }
   if (data.ok === true) {
     var urls = data.urls || {}
