@@ -171,7 +171,7 @@ export function reportLines(rep) {
   var L = []
   if (!rep) return L
   var s = rep.system || {}
-  var s = rep.system || {}
+  var r = rep.real || {}
   L.push('系统=' + (r.osPretty || r.osName || '-') + (r.osVersionId ? ' ' + r.osVersionId : '')
     + ' 内核=' + (r.kernelVersion || '-') + ' 架构=' + (r.arch || '-'))
   L.push('板型=' + (r.boardModel || '-') + (r.cpuHardware ? ' SoC=' + r.cpuHardware : ''))
