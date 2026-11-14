@@ -3,8 +3,8 @@
     <div class="bar">
       <text class="bartitle">功能检测</text>
       <div class="baractions">
-        <div class="btn-ghost" @click="refresh"><text class="btntext">{{ busy ? '探测中…' : '重新探测' }}</text></div>
-        <div class="btn-ghost" @click="goBack"><text class="btntext">返回</text></div>
+        <div class="btn ghost" @click="refresh"><text class="btntext">{{ busy ? '探测中…' : '重新探测' }}</text></div>
+        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
       </div>
     </div>
 
@@ -15,16 +15,7 @@
         <text class="verdictsub" v-if="verdictSub">{{ verdictSub }}</text>
       </div>
 
-      <text class="section">真实系统信息</text>
-      <div class="card">
-        <div class="kv" v-for="(row, i) in realRows" :key="'rs' + i">
-          <text class="k">{{ row.k }}</text>
-          <text class="v">{{ row.v }}</text>
-        </div>
-        <text class="hint" v-if="!realRows.length">该固件未提供系统信息接口，无法读取真实值</text>
-      </div>
-
-      <text class="section">框架与屏幕</text>
+      <text class="section">系统与设备</text>
       <div class="card">
         <div class="kv" v-for="(row, i) in systemRows" :key="'s' + i">
           <text class="k">{{ row.k }}</text>
@@ -78,7 +69,7 @@
 <script>
 import { collectReport, reportLines } from '../../services/probe.js'
 import { readState, writeState, loadAccount, migrateLegacy } from '../../services/store.js'
-import { request, systemInfo as platformSystemInfo } from '../../services/net.js'
+import { request } from '../../services/net.js'
 import { checkCompat, compatLine } from '../../services/compat.js'
 import { APP_VERSION } from '../../services/version.js'
 import { log } from '../../services/logger.js'
@@ -90,7 +81,6 @@ export default {
       busy: false,
       tsText: '-',
       systemRows: [],
-      realRows: [],
       probed: [],
       moduleCount: 0,
       runtime: [],
@@ -103,16 +93,7 @@ export default {
     }
   },
   methods: {
-    onShow() {
-      var self = this
-      /* 先让界面完成首帧: 重活(网络/存储/迁移)延到下一轮事件循环, 避免进页卡住 */
-      if (this._pending) return
-      this._pending = true
-      setTimeout(function () {
-        self._pending = false
-        self.refresh()
-      }, 60)
-    },
+    onShow() { this.refresh() },
     onHide() {},
     onUnload() {},
     goBack() { this.$page.finish() },
@@ -128,9 +109,7 @@ export default {
       this.busy = true
       var self = this
       try {
-        /* 分两步: 一) 立即拿到系统/框架/模块信息并渲染; 二) 再做自检与兼容性 */
         var rep = await collectReport({
-          systemInfo: platformSystemInfo,
           /* 每项都是真实调用: 存储写读回环、网络实打一次探测源、账号查一次、迁移实跑一次 */
           probeStorage: async function () {
             var stamp = 'p' + Date.now()
@@ -161,24 +140,11 @@ export default {
           },
         })
         var s = rep.system || {}
-        var r = rep.real || {}
-        self.realRows = [
-          { k: 'SKU', v: r.sku || '-' },
-          { k: '词典笔 OS', v: r.osVersion || '-' },
-          { k: '固件', v: r.firmwareVersion || '-' },
-          { k: '应用版本', v: r.appVersion || '-' },
-          { k: '编译时间', v: r.buildTime || '-' },
-          { k: '系统底座', v: (r.osPretty || r.osName || '-') + (r.osVersionId ? ' ' + r.osVersionId : '') },
-          { k: '内核', v: r.kernelVersion || '-' },
-          { k: '架构', v: r.arch || '-' },
-          { k: '板型', v: r.boardModel || '-' },
-          { k: 'SoC', v: r.cpuHardware || r.boardCompatible || '-' },
-        ]
         self.systemRows = [
-          { k: '框架平台', v: s.runtimePlatform },
-          { k: '框架版本', v: s.runtimeVersion },
+          { k: '平台', v: s.platform },
+          { k: '系统版本', v: s.osVersion },
           { k: 'API 版本', v: s.apiVersion },
-          { k: '框架型号', v: s.frameworkModel },
+          { k: '设备型号', v: s.deviceModel },
           { k: '机型族', v: s.theme },
           { k: '逻辑屏幕', v: s.width + ' x ' + s.height },
           { k: '物理屏幕', v: s.deviceWidth + ' x ' + s.deviceHeight },
@@ -247,14 +213,14 @@ export default {
   height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
   align-items: center; justify-content: center; margin-left: 8px;
 }
-.btn-ghost { background-color: #24272e; }
+.btn.ghost { background-color: #24272e; }
 .btntext { font-size: 15px; color: #f2f4f8; }
 .body { flex: 1; padding-left: 14px; padding-right: 14px; padding-top: 8px; }
 .verdict { border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; border-left-width: 3px; flex-direction: column; }
-.verdict-ok { background-color: #10231a; border-left-color: #35c46b; }
-.verdict-warn { background-color: #2a2213; border-left-color: #ffb020; }
-.verdict-bad { background-color: #2a1518; border-left-color: #e5484d; }
-.verdict-busy { background-color: #14161a; border-left-color: #4c9aff; }
+.verdict.ok { background-color: #10231a; border-left-color: #35c46b; }
+.verdict.warn { background-color: #2a2213; border-left-color: #ffb020; }
+.verdict.bad { background-color: #2a1518; border-left-color: #e5484d; }
+.verdict.busy { background-color: #14161a; border-left-color: #4c9aff; }
 .verdicttext { font-size: 16px; color: #f2f4f8; font-weight: bold; }
 .verdictsub { font-size: 13px; color: #b8b2a8; margin-top: 2px; }
 .section { font-size: 14px; color: #4c9aff; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }

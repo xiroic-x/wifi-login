@@ -18,7 +18,7 @@
     </div>
 
     <div class="foot">
-      <div class="btn-primary" @click="done"><text class="btntext">知道了</text></div>
+      <div class="btn primary" @click="done"><text class="btntext">知道了</text></div>
     </div>
   </div>
 </template>
@@ -92,6 +92,6 @@ export default {
   height: 32px; padding-left: 18px; padding-right: 18px; border-radius: 16px;
   align-items: center; justify-content: center;
 }
-.btn-primary { background-color: #4c9aff; }
+.btn.primary { background-color: #4c9aff; }
 .btntext { font-size: 15px; color: #ffffff; }
 </style>

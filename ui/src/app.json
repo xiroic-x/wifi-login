@@ -5,7 +5,7 @@
     "diag": "pages/diag/diag.vue",
     "migrated": "pages/migrated/migrated.vue",
     "about": "pages/about/about.vue",
-    "cleanUp": "pages/cleanup-cu/cleanUp.vue"
+    "cleanUp": "pages/cleanUpPage/cleanUp.vue"
   },
   "options": {
     "style": {}
