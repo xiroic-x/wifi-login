@@ -82,7 +82,6 @@ import { request, systemInfo as platformSystemInfo } from '../../services/net.js
 import { checkCompat, compatLine } from '../../services/compat.js'
 import { APP_VERSION } from '../../services/version.js'
 import { log } from '../../services/logger.js'
-import { probeVersionApis } from '../../services/versionprobe.js'
 
 export default {
   name: 'diag',
@@ -222,10 +221,6 @@ export default {
         self.lines.push('兼容性: ' + compatLine(comp))
         self.tsText = self.fmtTs(rep.ts)
         log('检测页', self.lines.join(' | ').slice(0, 700))
-        probeVersionApis().then(function (arr) {
-          if (arr && arr.length) log('版本探针', arr.join(' ;; ').slice(0, 900))
-          else log('版本探针', '无可用接口')
-        }).catch(function () {})
       } catch (e) {
         self.verdictText = '探测异常'
         self.verdictSub = String((e && e.message) || e)
