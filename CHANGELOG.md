@@ -252,4 +252,4 @@ adb shell miniapp_cli start 8001865309000001
 - 设备 IP 无法从固件查询（jsapi 无 `nm` 模块），Portal 参数以服务器下发的跳转参数为准
 - 服务端 GB2312 中文无法转 UTF-8（固件无 `misc` 模块），错误信息用错误码本地映射代替
 
-[1.0.0]: https://github.com/soarnext/wifi-login/releases/tag/v1.0.0
+[1.0.0]: https://github.com/xiroic-x/wifi-login/releases/tag/v1.0.0

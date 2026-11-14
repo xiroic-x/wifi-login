@@ -1,98 +1,239 @@
 <template>
-  <div class="page">
-    <div class="bar">
-      <text class="bartitle">关于</text>
-      <div class="baractions">
-        <div class="btn ghost" @click="goBack"><text class="btntext">返回</text></div>
+  <div class="wrapper">
+    <div class="headbar">
+      <text class="title">关于</text>
+      <div class="headbtns">
+        <div class="hbtn" @click="goBack">
+          <text class="hbtn-text">返回</text>
+        </div>
       </div>
     </div>
+    <scroller class="aboutscroll">
+      <div class="titlerow">
+        <text class="appname">WiFi 网络认证</text>
+        <div class="verbadge"><text class="verbadge-text">v{{ version }}</text></div>
+      </div>
+      <text class="row">appid: {{ appid }}</text>
 
-    <scroller class="body">
-      <div class="hero">
-        <div class="logo"><text class="logotext">Wi</text></div>
-        <div class="herotext">
-          <text class="appname">WiFi 网络认证</text>
-          <text class="appdesc">检测 · 登录 · 设备管理，一个页面走完</text>
+      <text class="section">简介</text>
+      <text class="row">· WiFi 认证上网框架 + 模块化认证适配器（自动识别认证页类型）</text>
+      <text class="row">· 连通性测试 / 账号密码登录 / 在线设备管理</text>
+      <text class="row">· 内置 Panabit 与 H3C iMC 适配器，更多认证系统见 ADAPTER.md</text>
+
+      <text class="section">开源</text>
+      <text class="row coderow" @click="openRepo">https://github.com/xiroic-x/wifi-login</text>
+      <text class="row">· 许可：框架 GPLv3 / 适配器与平台层 MIT（分层许可）</text>
+
+      <text class="section">用户群</text>
+      <div class="qqrow" @click="showQr = true">
+        <div class="qqbadge"><text class="qqbadge-text">QQ</text></div>
+        <div class="qqtexts">
+          <text class="qqnum">QQ 群：1132515689</text>
+          <text class="qqhint">点此查看二维码，用手机 QQ 扫码加入</text>
         </div>
-        <div class="badge"><text class="badgetext">v{{ version }}</text></div>
+        <div class="qraction"><text class="qraction-text">二维码</text></div>
       </div>
 
-      <text class="section">能做什么</text>
-      <text class="li">· 连通性检测：204 只当证据，必须非探测源复核才判「无需登入」</text>
-      <text class="li">· 账号登录：内置 Panabit 与 H3C iMC 门户适配器，支持按网络记住密码</text>
-      <text class="li">· 设备管理：Panabit 门户可查看在线设备并下线</text>
-      <text class="li">· 功能检测：看清系统版本、固件能力与兼容性判定</text>
+      <text class="section">作者</text>
+      <text class="row">· Xiro · 来自 vibe coding 制作</text>
 
-      <text class="section">支持的机型</text>
-      <text class="li">· RK 包：X 系列（RK3562 / RK3566）</text>
-      <text class="li">· CVI 包：S 系列 / X5 系列 / A 系列（32 位）</text>
-      <text class="li">· 界面自适应：横条屏与竖屏全面屏都完整显示</text>
-
-      <text class="section">应用信息</text>
-      <div class="kv"><text class="k">appid</text><text class="v">{{ appid }}</text></div>
-      <div class="kv"><text class="k">版本</text><text class="v">{{ version }}</text></div>
-      <div class="kv"><text class="k">开源</text><text class="v">github.com/soarnext/wifi-login</text></div>
-      <div class="kv"><text class="k">许可</text><text class="v">框架 GPLv3 · 适配器与平台层 MIT</text></div>
-      <div class="kv"><text class="k">作者</text><text class="v">Xiro</text></div>
-
-      <text class="tip">遇到问题请附机型、版本与「功能检测」页的自检结果提交 Issue。</text>
+      <text class="section">设备兼容性</text>
+      <text class="row">· 已实测机型见 README 的「支持机型与产物」</text>
+      <text class="row">· 遇到问题请附机型、SKU 与「功能检测」页的自检结果提 Issue</text>
     </scroller>
+
+    <div class="statusbar">
+      <text class="statusinfo">github.com/xiroic-x/wifi-login  |  QQ 群 1132515689</text>
+    </div>
+
+    <!-- 二维码弹层：点击遮罩关闭 -->
+    <div class="qrmask" v-if="showQr" @click="showQr = false">
+      <div class="qrcard" @click="noop">
+        <text class="qrtitle">扫码加入 WiFi-login 用户群</text>
+        <image class="qrimg" src="../../assets/qq-group.jpg"></image>
+        <text class="qrnum">QQ 群号：1132515689</text>
+        <text class="qrtip">用手机 QQ「扫一扫」识别上方二维码</text>
+        <div class="qrdone" @click="showQr = false">
+          <text class="qrdone-text">关闭</text>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { APP_VERSION, APP_ID } from '../../services/version.js'
 
+const REPO_URL = 'https://github.com/xiroic-x/wifi-login'
+const QQ_GROUP = '1132515689'
+const QQ_JOIN_URL = 'https://qm.qq.com/q/84cy1FHwX0'
+
 export default {
   name: 'about',
   data() {
-    return { version: APP_VERSION, appid: APP_ID }
+    return {
+      version: APP_VERSION,
+      appid: APP_ID,
+      showQr: false,
+      repoUrl: REPO_URL,
+      qqGroup: QQ_GROUP,
+    }
   },
   methods: {
     onShow() {},
     onHide() {},
     onUnload() {},
+    noop() {},
     goBack() { this.$page.finish() },
+    /* 打开仓库：优先用系统浏览器能力，没有就退化为复制/提示 */
+    openRepo() {
+      try {
+        if (typeof $falcon !== 'undefined' && $falcon.jsapi && $falcon.jsapi.system && $falcon.jsapi.system.openUrl) {
+          $falcon.jsapi.system.openUrl({ url: REPO_URL })
+          return
+        }
+      } catch (e) {}
+      this.showQr = true
+    },
   },
 }
 </script>
 
 <style>
-/* 设计语言: 背景 #0b0c0e / 面板 #14161a / 分隔 #24272e / 主色 #4c9aff
- * 文字 #f2f4f8 / 次要 #9aa4b2 / 弱 #6b7480 · 顶栏 44 · 圆角 8 · 全部百分比宽度 */
-.page { width: 100%; height: 100%; background-color: #0b0c0e; flex-direction: column; }
-.bar {
-  width: 100%; height: 44px; background-color: #14161a;
-  flex-direction: row; align-items: center; justify-content: space-between;
-  padding-left: 16px; padding-right: 12px; flex-wrap: wrap;
+.wrapper {
+  width: 960px;
+  height: 266px;
+  background-color: #000000;
+  flex-direction: column;
 }
-.bartitle { font-size: 22px; color: #f2f4f8; font-weight: bold; }
-.baractions { flex-direction: row; align-items: center; flex-wrap: wrap; }
-.btn {
-  height: 30px; padding-left: 14px; padding-right: 14px; border-radius: 15px;
-  align-items: center; justify-content: center; margin-left: 8px;
+.headbar {
+  width: 960px;
+  height: 44px;
+  background-color: #141414;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 20px;
+  padding-right: 16px;
 }
-.btn.ghost { background-color: #24272e; }
-.btntext { font-size: 15px; color: #f2f4f8; }
-.body { flex: 1; padding-left: 16px; padding-right: 16px; padding-top: 10px; }
-.hero { flex-direction: row; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-.logo {
-  width: 42px; height: 42px; border-radius: 10px; background-color: #4c9aff;
-  align-items: center; justify-content: center; margin-right: 12px;
+.title {
+  font-size: 26px;
+  color: #ffffff;
+  font-weight: bold;
 }
-.logotext { font-size: 20px; color: #ffffff; font-weight: bold; }
-.herotext { flex: 1; flex-direction: column; }
-.appname { font-size: 20px; color: #f2f4f8; font-weight: bold; }
-.appdesc { font-size: 14px; color: #9aa4b2; margin-top: 2px; }
-.badge {
-  padding-left: 10px; padding-right: 10px; height: 24px; border-radius: 12px;
-  background-color: #1b2735; align-items: center; justify-content: center;
+.headbtns { flex-direction: row; align-items: center; }
+.hbtn {
+  width: 90px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: #333333;
+  align-items: center;
+  justify-content: center;
 }
-.badgetext { font-size: 13px; color: #4c9aff; }
-.section { font-size: 15px; color: #4c9aff; font-weight: bold; margin-top: 10px; margin-bottom: 4px; }
-.li { font-size: 14px; color: #d7dce4; margin-bottom: 3px; }
-.kv { flex-direction: row; margin-bottom: 3px; flex-wrap: wrap; }
-.k { width: 76px; font-size: 14px; color: #6b7480; }
-.v { flex: 1; font-size: 14px; color: #d7dce4; }
-.tip { font-size: 13px; color: #6b7480; margin-top: 12px; margin-bottom: 14px; }
+.hbtn-text { font-size: 17px; color: #ffffff; }
+.aboutscroll {
+  width: 960px;
+  height: 198px;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-top: 10px;
+}
+.titlerow { flex-direction: row; align-items: center; }
+.appname { font-size: 24px; color: #ffffff; font-weight: bold; }
+.verbadge {
+  margin-left: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: #1f3a5f;
+  align-items: center;
+  justify-content: center;
+}
+.verbadge-text { font-size: 15px; color: #6ec1ff; }
+.section {
+  font-size: 18px;
+  color: #6ec1ff;
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+.row { font-size: 16px; color: #d8d8d8; margin-bottom: 3px; }
+.coderow { color: #6ec1ff; }
+.qqrow {
+  flex-direction: row;
+  align-items: center;
+  background-color: #14161a;
+  border-radius: 8px;
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin-top: 4px;
+}
+.qqbadge {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background-color: #12b7f5;
+  align-items: center;
+  justify-content: center;
+}
+.qqbadge-text { font-size: 15px; color: #ffffff; font-weight: bold; }
+.qqtexts { flex: 1; flex-direction: column; margin-left: 10px; }
+.qqnum { font-size: 17px; color: #ffffff; }
+.qqhint { font-size: 14px; color: #9aa4b2; }
+.qraction {
+  padding-left: 12px;
+  padding-right: 12px;
+  height: 28px;
+  border-radius: 14px;
+  background-color: #1f3a5f;
+  align-items: center;
+  justify-content: center;
+}
+.qraction-text { font-size: 14px; color: #6ec1ff; }
+.statusbar {
+  width: 960px;
+  height: 24px;
+  background-color: #141414;
+  align-items: center;
+  padding-left: 20px;
+}
+.statusinfo { font-size: 13px; color: #808080; }
+.qrmask {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 960px;
+  height: 266px;
+  background-color: rgba(0, 0, 0, 0.82);
+  align-items: center;
+  justify-content: center;
+}
+.qrcard {
+  width: 300px;
+  background-color: #14161a;
+  border-radius: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 12px;
+  padding-right: 12px;
+  flex-direction: column;
+  align-items: center;
+}
+.qrtitle { font-size: 17px; color: #ffffff; font-weight: bold; margin-bottom: 6px; }
+.qrimg { width: 190px; height: 190px; border-radius: 6px; }
+.qrnum { font-size: 16px; color: #6ec1ff; margin-top: 6px; }
+.qrtip { font-size: 13px; color: #9aa4b2; margin-top: 2px; }
+.qrdone {
+  margin-top: 8px;
+  width: 110px;
+  height: 30px;
+  border-radius: 15px;
+  background-color: #2f6fed;
+  align-items: center;
+  justify-content: center;
+}
+.qrdone-text { font-size: 15px; color: #ffffff; }
 </style>
