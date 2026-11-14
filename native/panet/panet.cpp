@@ -714,11 +714,6 @@ public:
             std::string hostname = readTextFile("/etc/hostname");
             /* SKU 由厂商 sys_config 持有(实测 OVERHEAD_X62_SKU_CHN_PLUS) */
             std::string sku = runCmd("/usr/bin/sys_config sku 2>/dev/null");
-            /* SKU -> 对外型号: 词典笔产品命名(YDPX6-2CHNPLUS 等)。
-             * 只做已知映射, 未命中的机型如实显示 SKU 本身, 不猜测。 */
-            std::string modelName;
-            if (sku == "OVERHEAD_X62_SKU_CHN_PLUS") modelName = "YDPX6-2CHNPLUS";
-            else modelName = sku.empty() ? hostname : sku;
             std::string ver = readTextFile("/proc/version");
             std::string cpu = readTextFile("/proc/cpuinfo");
 
@@ -758,7 +753,6 @@ public:
             json += "\"firmwareVersion\":\"" + jsonEsc(kvOf(verFile, "Firmware")) + "\",";
             json += "\"appVersion\":\"" + jsonEsc(kvOf(verFile, "DictPen_APP")) + "\",";
             json += "\"buildTime\":\"" + jsonEsc(kvOf(verFile, "Build_Time")) + "\",";
-            json += "\"modelName\":\"" + jsonEsc(modelName) + "\",";
             json += "\"sku\":\"" + jsonEsc(sku) + "\",";
             json += "\"hostname\":\"" + jsonEsc(hostname) + "\",";
             json += "\"pcbaVersion\":\"" + jsonEsc(runCmd("/usr/bin/get_pcba_version 2>/dev/null")) + "\"";

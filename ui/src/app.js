@@ -48,7 +48,7 @@ class App extends FalconAppBase {
       /* 真实系统信息: 由平台层读取(os-release/device-tree/固件接口), env 里的是框架版本 */
       systemInfo().then(function (si) {
         if (si && (si.osPretty || si.osName)) {
-          log('环境', '型号=' + (si.modelName || '-') + ' SKU=' + (si.sku || '-') + ' 词典笔OS=' + (si.osVersion || '-'));
+          log('环境', 'SKU=' + (si.sku || '-') + ' 词典笔OS=' + (si.osVersion || '-'));
           log('环境', '真实系统=' + (si.osPretty || si.osName) + ' ' + (si.osVersionId || '') +
             ' 内核=' + (si.kernelVersion || '-') + ' 架构=' + (si.arch || '-') + ' 板型=' + (si.boardModel || '-'))
         }
