@@ -130,6 +130,10 @@ static UrlParts parseUrl(const std::string &url)
     return u;
 }
 
+static const char *CRLF = "\r\n";
+static const char *CRLFCRLF = "\r\n\r\n";
+static const char *CHUNK_END = "\r\n0\r\n\r\n";
+
 /* 前置声明: TcpConn::recvAll 里判断响应头字段要用(实现见下方的全局 toLower) */
 static std::string toLower(std::string s);
 
@@ -221,9 +225,7 @@ public:
     {
         std::string out;
         char buf[4096];
-        size_t headerEnd = std::string::npos;   // "
-
-" 之后的位置
+        size_t headerEnd = std::string::npos;   // header 结束位置
         long needBody = -1;                     // Content-Length; -1 未知
         bool chunked = false;
         for (;;) {
@@ -239,9 +241,7 @@ public:
 
             /* 第一次拿到完整头部时, 解析出 body 长度语义 */
             if (headerEnd == std::string::npos) {
-                headerEnd = out.find("
-
-");
+                headerEnd = out.find(CRLFCRLF);
                 if (headerEnd != std::string::npos) {
                     std::string head = out.substr(0, headerEnd);
                     std::string lower = toLower(head);
@@ -251,8 +251,7 @@ public:
                     } else {
                         size_t pos = lower.find("content-length:");
                         if (pos != std::string::npos) {
-                            size_t eol = lower.find("
-", pos);
+                            size_t eol = lower.find(CRLF, pos);
                             std::string num = lower.substr(pos + 15, eol == std::string::npos ? std::string::npos : eol - pos - 15);
                             try { needBody = std::stol(num); } catch (...) { needBody = -1; }
                         } else {
@@ -269,17 +268,10 @@ public:
                 if ((long)(out.size() - headerEnd) >= needBody) break;
                 continue;
             }
-            /* chunked: 收到终止块 "0
-
-" 就够了 */
+            /* chunked: 收到终止块(0 + 空行)就够了 */
             if (chunked) {
-                if (out.find("
-0
-
-", headerEnd) != std::string::npos ||
-                    out.compare(out.size() >= 5 ? out.size() - 5 : 0, 5, "0
-
-") == 0) break;
+                if (out.find(CHUNK_END, headerEnd) != std::string::npos ||
+                    out.compare(out.size() >= 5 ? out.size() - 5 : 0, 5, "0" CRLF CRLF) == 0) break;
                 continue;
             }
         }
