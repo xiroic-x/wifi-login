@@ -8,6 +8,7 @@
       </div>
       <div class="baractions">
         <div class="btn ghost" @click="openDiag"><text class="btntext">检测</text></div>
+        <div class="btn ghost" @click="openFeedback"><text class="btntext">反馈</text></div>
         <div class="btn ghost" @click="openAbout"><text class="btntext">关于</text></div>
         <div class="btn primary" @click="runCheck(null, true)">
           <text class="btntext">{{ checking ? '检测中…' : '重新检测' }}</text>
@@ -417,6 +418,9 @@ export default {
 
     openDiag() {
       $falcon.navTo('diag', {})
+    },
+    openFeedback() {
+      $falcon.navTo('feedback', {})
     },
     openAbout() {
       $falcon.navTo('about', {})
