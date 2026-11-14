@@ -148,53 +148,77 @@ function latin1(bytes) {
 /*
  * UTF-8 解码。
  *
- * QuickJS 不一定有 TextDecoder, 所以手写一份备用实现。
- * 之前响应体只走 latin1(逐字节 fromCharCode), 中文会被拆成单字节乱码 ——
- * 服务端 JSON 里的中文 message / 工单标题会变成字节数列, JSON.parse 直接失败。
- * 非法序列按替换字符处理, 绝不抛错。
+ * 性能是硬约束: 这个函数在每次网络响应上都要跑, 而 QuickJS 里字符串 += 是 O(n),
+ * 逐字符拼接会退化成 O(n^2) —— 遇到门户返回的几百 KB HTML 时直接把 JS 线程卡死
+ * (表现为一直卡在"正在检测", 最终被系统杀掉)。
+ * 所以: ASCII 走分块快速路径, 其余按块收集后一次性 join。
  */
 function utf8Decode(bytes) {
   try {
     if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes)
   } catch (e) {}
-  var out = ''
-  var i = 0
   var n = bytes.length
-  var REPL = '\ufffd'
+  var parts = []
+  var ascii = ''
+  var CHUNK = 2048
+  var i = 0
+  var REPL = String.fromCharCode(0xfffd)
+  function flushAscii() {
+    if (ascii) { parts.push(ascii); ascii = '' }
+  }
   while (i < n) {
     var c = bytes[i]
+    if (c < 0x80) {
+      ascii += String.fromCharCode(c)
+      i++
+      if (ascii.length >= CHUNK) flushAscii()
+      continue
+    }
+    flushAscii()
     var cp = 0
     var need = 0
-    if (c < 0x80) { cp = c; need = 0 }
-    else if (c >= 0xc2 && c <= 0xdf) { cp = c & 0x1f; need = 1 }
+    if (c >= 0xc2 && c <= 0xdf) { cp = c & 0x1f; need = 1 }
     else if (c >= 0xe0 && c <= 0xef) { cp = c & 0x0f; need = 2 }
     else if (c >= 0xf0 && c <= 0xf4) { cp = c & 0x07; need = 3 }
-    else { out += REPL; i++; continue }
-    if (i + need >= n) { out += REPL; break }
-    var okSeq = true
+    else { parts.push(REPL); i++; continue }
+    if (i + need >= n) { parts.push(REPL); break }
+    var ok = true
     for (var k = 1; k <= need; k++) {
       var cc = bytes[i + k]
-      if ((cc & 0xc0) !== 0x80) { okSeq = false; break }
+      if ((cc & 0xc0) !== 0x80) { ok = false; break }
       cp = (cp << 6) | (cc & 0x3f)
     }
-    if (!okSeq) { out += REPL; i++; continue }
+    if (!ok) { parts.push(REPL); i++; continue }
     i += need + 1
     if (cp > 0xffff) {
       cp -= 0x10000
-      out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff))
+      parts.push(String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)))
     } else {
-      out += String.fromCharCode(cp)
+      parts.push(String.fromCharCode(cp))
     }
   }
-  return out
+  flushAscii()
+  return parts.join('')
 }
 
-/* 响应体转文本: 优先 UTF-8; 含 NUL 或解码出替换字符过多时退回 latin1(二进制安全) */
-export function bodyText(bytes) {
-  var t = utf8Decode(bytes)
+/*
+ * 响应体转文本。
+ * limit: 最多解码多少字节(默认 256KB)。门户 HTML 可能几 MB, 全量解码毫无意义且会卡死,
+ * 调用方真正需要的是头部(标题/表单/跳转), 截断足够。
+ */
+export function bodyText(bytes, limit) {
+  var cap = limit > 0 ? limit : 256 * 1024
+  var view = bytes.length > cap ? bytes.subarray(0, cap) : bytes
+  var t = utf8Decode(view)
+  /* 采样判断是否二进制(替换字符过多), 避免为统计再全量扫一遍 */
   var bad = 0
-  for (var i = 0; i < t.length; i++) if (t.charCodeAt(i) === 0xfffd) bad++
-  if (bad > 0 && bad * 8 > t.length) return latin1(bytes)
+  var step = Math.max(1, Math.floor(t.length / 512))
+  var seen = 0
+  for (var i = 0; i < t.length; i += step) {
+    seen++
+    if (t.charCodeAt(i) === 0xfffd) bad++
+  }
+  if (seen > 0 && bad * 4 > seen) return latin1(view)
   return t
 }
 
