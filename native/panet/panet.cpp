@@ -270,8 +270,11 @@ public:
             }
             /* chunked: 收到终止块(0 + 空行)就够了 */
             if (chunked) {
-                if (out.find(CHUNK_END, headerEnd) != std::string::npos ||
-                    out.compare(out.size() >= 5 ? out.size() - 5 : 0, 5, "0" CRLF CRLF) == 0) break;
+                /* 终止块: "0" + CRLF + CRLF(紧跟头时可能只有 "0\r\n\r\n") */
+                std::string tail = std::string("0") + CRLF + CRLF;
+                bool tailMatched = out.size() >= tail.size() &&
+                    out.compare(out.size() - tail.size(), tail.size(), tail) == 0;
+                if (out.find(CHUNK_END, headerEnd) != std::string::npos || tailMatched) break;
                 continue;
             }
         }
